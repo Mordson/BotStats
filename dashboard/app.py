@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 
+import altair as alt
 import pandas as pd
 import requests
 import streamlit as st
@@ -28,6 +29,18 @@ def seconds_to_hours(seconds: int) -> float:
     return round(seconds / 3600, 2)
 
 
+def bar_chart(df: pd.DataFrame, x_col: str, y_col: str = "Godziny") -> None:
+    chart = (
+        alt.Chart(df)
+        .mark_bar()
+        .encode(
+            x=alt.X(f"{x_col}:N", sort="-y", title=x_col),
+            y=alt.Y(f"{y_col}:Q", scale=alt.Scale(domainMin=0), title=y_col),
+        )
+    )
+    st.altair_chart(chart, use_container_width=True)
+
+
 st.set_page_config(page_title="Discord Activity Dashboard", page_icon="🎮", layout="wide")
 st.title("🎮 Discord Activity Dashboard")
 
@@ -42,7 +55,7 @@ with tab_voice:
         df["Godziny"] = df["total_seconds"].apply(seconds_to_hours)
         df = df.rename(columns={"display_name": "Użytkownik"})[["Użytkownik", "Godziny"]]
 
-        st.bar_chart(df.set_index("Użytkownik")["Godziny"])
+        bar_chart(df, "Użytkownik")
         st.dataframe(df, use_container_width=True, hide_index=True)
     else:
         st.info("Brak danych — bot jeszcze nie zarejestrował żadnych sesji głosowych.")
@@ -58,7 +71,7 @@ with tab_games:
         df["Godziny"] = df["total_seconds"].apply(seconds_to_hours)
         df = df.rename(columns={"activity_name": "Gra"})[["Gra", "Godziny"]]
 
-        st.bar_chart(df.set_index("Gra")["Godziny"])
+        bar_chart(df, "Gra")
         st.dataframe(df, use_container_width=True, hide_index=True)
     else:
         st.info("Brak danych — bot jeszcze nie zarejestrował żadnych aktywności.")
@@ -82,7 +95,7 @@ with tab_user:
             df = df.sort_values("Godziny", ascending=False)
 
             st.subheader(f"Gry — {selected_name}")
-            st.bar_chart(df.set_index("Gra")["Godziny"])
+            bar_chart(df, "Gra")
             st.dataframe(df, use_container_width=True, hide_index=True)
         else:
             st.info(f"{selected_name} nie ma jeszcze żadnych zarejestrowanych aktywności.")

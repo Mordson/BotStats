@@ -153,6 +153,7 @@ class TrackingService:
             name = getattr(activity, "name", None)
             if not name:
                 continue
+            name = name.strip()
             key = f"{activity.type.name}:{name}"
             result[key] = activity
         return result

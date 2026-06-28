@@ -177,13 +177,14 @@ class ActivitySessionRepository:
     async def top_games(self, limit: int = 10) -> list[tuple[str, int]]:
         """Ranking gier (activity_type == 'playing') po sumarycznym czasie gry."""
         total = func.sum(ActivitySession.duration_seconds)
+        group_key = func.lower(func.trim(ActivitySession.activity_name))
         result = await self.session.execute(
-            select(ActivitySession.activity_name, total)
+            select(func.min(ActivitySession.activity_name), total)
             .where(
                 ActivitySession.activity_type == "playing",
                 ActivitySession.duration_seconds.is_not(None),
             )
-            .group_by(ActivitySession.activity_name)
+            .group_by(group_key)
             .order_by(total.desc())
             .limit(limit)
         )
@@ -192,14 +193,15 @@ class ActivitySessionRepository:
     async def total_game_time_by_user(self, user_id: int) -> list[tuple[str, int]]:
         """Czas gry danego użytkownika, pogrupowany po nazwie gry."""
         total = func.sum(ActivitySession.duration_seconds)
+        group_key = func.lower(func.trim(ActivitySession.activity_name))
         result = await self.session.execute(
-            select(ActivitySession.activity_name, total)
+            select(func.min(ActivitySession.activity_name), total)
             .where(
                 ActivitySession.user_id == user_id,
                 ActivitySession.activity_type == "playing",
                 ActivitySession.duration_seconds.is_not(None),
             )
-            .group_by(ActivitySession.activity_name)
+            .group_by(group_key)
             .order_by(total.desc())
         )
         return [(name, seconds or 0) for name, seconds in result.all()]

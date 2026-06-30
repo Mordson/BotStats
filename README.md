@@ -1,74 +1,68 @@
 # Discord Activity Bot
 
-Bot Discord do analizy aktywności użytkowników na prywatnym serwerze:
-- czas spędzony na kanałach głosowych,
-- gry/aktywności (np. "Playing Valorant", Spotify, streaming),
+A Discord bot for tracking user activity on a private server:
+- time spent on voice channels,
+- games and activities (e.g. "Playing Valorant", Spotify, streaming),
 
-oraz REST API udostępniające te dane dashboardowi.
+along with a REST API exposing that data to a dashboard.
 
-## Architektura
+## Architecture
 
-Projekt jest podzielony na trzy niezależne, ale współdzielące jedną bazę danych
-warstwy:
+The project is split into three independent layers that share a single database:
 
 ```
 discord-activity-bot/
-├── config.py              # wspólna konfiguracja (Pydantic Settings)
-├── core/                   # warstwa wspólna - modele, repozytoria, serwisy
-│   ├── database.py         # silnik SQLAlchemy (async, PostgreSQL)
-│   ├── models.py            # modele ORM: User, VoiceSession, ActivitySession
-│   ├── repositories.py       # Repository pattern - zapytania do bazy
-│   └── services.py            # Service layer - logika biznesowa trackingu
-├── bot/                    # bot Discord (discord.py)
-│   ├── main.py              # punkt wejścia, rejestracja cogów
+├── config.py              # shared configuration (Pydantic Settings)
+├── core/                  # shared layer — models, repositories, services
+│   ├── database.py        # SQLAlchemy async engine (PostgreSQL)
+│   ├── models.py          # ORM models: User, VoiceSession, ActivitySession
+│   ├── repositories.py    # Repository pattern — all database queries
+│   └── services.py        # Service layer — tracking business logic
+├── bot/                   # Discord bot (discord.py)
+│   ├── main.py            # entry point, cog registration
 │   └── cogs/
-│       ├── voice_tracker.py    # on_voice_state_update -> czas na voice
-│       └── presence_tracker.py # on_presence_update -> gry/aktywności
-└── api/                    # REST API dla dashboardu (FastAPI)
+│       ├── voice_tracker.py    # on_voice_state_update → voice time
+│       └── presence_tracker.py # on_presence_update → games/activities
+└── api/                   # REST API for the dashboard (FastAPI)
     ├── main.py
-    ├── schemas.py           # DTO (Pydantic) - kontrakt API
+    ├── schemas.py          # DTOs (Pydantic) — API contract
     └── routers/
         ├── users.py
         └── stats.py
 ```
 
-### Zastosowane wzorce
+### Design patterns
 
-| Wzorzec | Gdzie | Dlaczego |
+| Pattern | Where | Why |
 |---|---|---|
-| **Layered architecture** | `core` / `bot` / `api` | Rozdzielenie trackingu, logiki biznesowej, dostępu do danych i API. Bota i API można uruchamiać/skalować niezależnie. |
-| **Repository pattern** | `core/repositories.py` | Cała logika zapytań SQL w jednym miejscu. Serwisy i API nie wiedzą, jak dane są przechowywane. |
-| **Service layer** | `core/services.py` | `TrackingService` zawiera logikę "co się dzieje, gdy user wejdzie na kanał / zacznie grać" - niezależnie od discord.py i FastAPI. |
-| **Cog / Extension pattern** | `bot/cogs/*` | Każdy typ trackingu (voice, presence) jako osobny, wymienny moduł bota. |
-| **DTO / Schema validation** | `api/schemas.py` | API zwraca własny kontrakt (Pydantic), niezależny od modeli ORM. |
-| **Dependency Injection** | `api/deps.py` + `Depends()` | Sesja DB wstrzykiwana do endpointów FastAPI. |
+| **Layered architecture** | `core` / `bot` / `api` | Separates tracking, business logic, data access, and API. Bot and API can be deployed and scaled independently. |
+| **Repository pattern** | `core/repositories.py` | All SQL query logic in one place. Services and API have no knowledge of how data is stored. |
+| **Service layer** | `core/services.py` | `TrackingService` contains the logic for "what happens when a user joins a channel / starts playing" — independent of discord.py and FastAPI. |
+| **Cog / Extension pattern** | `bot/cogs/*` | Each tracking type (voice, presence) as a separate, interchangeable bot module. |
+| **DTO / Schema validation** | `api/schemas.py` | API returns its own contract (Pydantic), decoupled from ORM models. |
+| **Dependency Injection** | `api/deps.py` + `Depends()` | DB session injected into FastAPI endpoints. |
 
-### Model danych
+### Data model
 
-- **users** - `id` (Discord snowflake), `username`, `display_name`, `first_seen`
-- **voice_sessions** - sesja na kanale głosowym: `user_id`, `channel_id`, `channel_name`, `start_time`, `end_time`, `duration_seconds`
-- **activity_sessions** - sesja aktywności (gra/streaming/Spotify): `user_id`, `activity_name`, `activity_type`, `start_time`, `end_time`, `duration_seconds`
+- **users** — `id` (Discord snowflake), `username`, `display_name`, `first_seen`
+- **voice_sessions** — voice channel session: `user_id`, `channel_id`, `channel_name`, `start_time`, `end_time`, `duration_seconds`
+- **activity_sessions** — activity session (game/streaming/Spotify): `user_id`, `activity_name`, `activity_type`, `start_time`, `end_time`, `duration_seconds`
 
-Czas trwania (`duration_seconds`) jest liczony w momencie **zamknięcia** sesji
-(gdy użytkownik wyjdzie z kanału / zmieni aktywność). Dzięki temu dashboard
-może po prostu sumować `duration_seconds` bez liczenia "na żywo".
+Duration (`duration_seconds`) is calculated at the moment of **session close** (when the user leaves a channel or changes activity). This allows the dashboard to simply sum `duration_seconds` without any live calculations.
 
-## Wymagania wstępne (Discord Developer Portal)
+## Prerequisites (Discord Developer Portal)
 
-W [Discord Developer Portal](https://discord.com/developers/applications) dla
-Twojej aplikacji/bota:
+In the [Discord Developer Portal](https://discord.com/developers/applications) for your application/bot:
 
-1. Zakładka **Bot** -> **Privileged Gateway Intents** -> włącz:
+1. **Bot** tab → **Privileged Gateway Intents** → enable:
    - **Server Members Intent**
    - **Presence Intent**
 
-   Bez tego `on_voice_state_update` zadziała tylko częściowo, a
-   `on_presence_update` nie będzie wywoływany.
+   Without these, `on_voice_state_update` will only work partially and `on_presence_update` will never fire.
 
-2. Zaproś bota na serwer z uprawnieniami minimum: `View Channels`, `Connect`
-   (do widzenia kanałów głosowych).
+2. Invite the bot to your server with at minimum: `View Channels`, `Connect` permissions (to see voice channels).
 
-## Uruchomienie lokalnie (bez Dockera)
+## Running locally (without Docker)
 
 ```bash
 python -m venv .venv
@@ -77,61 +71,46 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# wpisz DISCORD_TOKEN, ustaw DATABASE_URL na lokalny PostgreSQL
+# fill in DISCORD_TOKEN, set DATABASE_URL to your local PostgreSQL
 
-# uruchom bota
+# start the bot
 python -m bot.main
 
-# w drugim terminalu - API dla dashboardu
+# in a second terminal — API for the dashboard
 uvicorn api.main:app --reload
 ```
 
-API będzie dostępne na `http://localhost:8000`, dokumentacja Swagger na
-`http://localhost:8000/docs`.
+The API will be available at `http://localhost:8000`, Swagger docs at `http://localhost:8000/docs`.
 
-## Uruchomienie z Docker Compose
+## Running with Docker Compose
 
 ```bash
 cp .env.example .env
-# wpisz DISCORD_TOKEN
+# fill in DISCORD_TOKEN
 ```
 
-W `.env` dla wersji dockerowej **host bazy danych musi wskazywać na nazwę
-serwisu**, nie na `localhost`:
+In `.env` for the Docker version, the **database host must point to the service name**, not `localhost`:
 
 ```
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/discord_activity
 ```
 
-Następnie:
+Then:
 
 ```bash
 docker compose up --build
 ```
 
-To uruchomi: PostgreSQL, bota oraz API (port `8000`).
+This starts PostgreSQL, the bot, the API (port `8000`), and the dashboard (port `8501`).
 
-## Endpointy API (dla dashboardu)
+## API endpoints (for the dashboard)
 
-- `GET /users/` - lista użytkowników
-- `GET /users/{user_id}` - dane jednego użytkownika
-- `GET /users/{user_id}/games` - czas gry użytkownika w poszczególnych grach
-- `GET /stats/voice-time` - ranking użytkowników po czasie na kanałach głosowych
-- `GET /stats/top-games` - ranking gier po łącznym czasie gry (parametr `limit`)
+- `GET /users/` — list of users
+- `GET /users/{user_id}` — single user data
+- `GET /users/{user_id}/games` — per-game playtime for a user
+- `GET /stats/voice-time` — user leaderboard by voice channel time
+- `GET /stats/top-games` — game leaderboard by total playtime (`limit` query param)
 
-Wszystkie czasy są zwracane w **sekundach** (`total_seconds`) - konwersję na
-godziny/dni najlepiej wykonać na froncie, w zależności od potrzeb dashboardu.
+All times are returned in **seconds** (`total_seconds`) — conversion to hours/days is left to the frontend.
 
-## Rekomendowane kolejne kroki (produkcja)
 
-- **Migracje bazy** - zastąpić `init_db()` (czyli `create_all`) Alembicem,
-  żeby bezpiecznie wprowadzać zmiany schematu bez utraty danych.
-- **Agregacja** - dla dużych serwerów dodać osobny scheduler (np.
-  `APScheduler`), który raz dziennie agreguje `voice_sessions` /
-  `activity_sessions` do tabel `daily_stats`, żeby dashboard nie liczył
-  sumy z tysięcy wierszy przy każdym odświeżeniu.
-- **Autoryzacja API** - przed wystawieniem API publicznie dodać
-  uwierzytelnianie (np. API key, OAuth2) i ograniczyć `CORS_ORIGINS` do
-  domeny dashboardu.
-- **Dashboard** - osobna aplikacja frontendowa (np. Next.js + Recharts),
-  konsumująca powyższe endpointy.

@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 import discord
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.repositories import ActivitySessionRepository, UserRepository, VoiceSessionRepository
+from core.repositories import ActivitySessionRepository, UserRepository, VoiceSessionRepository, _normalize_activity_name
 
 
 class TrackingService:
@@ -88,7 +88,9 @@ class TrackingService:
         # Aktywności, które się zakończyły
         for key, activity in before_activities.items():
             if key not in after_activities:
-                open_session = await self.activities.get_open_session(after.id, activity.name)
+                open_session = await self.activities.get_open_session(
+                    after.id, _normalize_activity_name(activity.name)
+                )
                 if open_session is not None:
                     await self.activities.close_session(open_session, now)
 
@@ -98,7 +100,7 @@ class TrackingService:
                 await self.activities.start_session(
                     user_id=after.id,
                     guild_id=after.guild.id,
-                    activity_name=activity.name,
+                    activity_name=_normalize_activity_name(activity.name),
                     activity_type=activity.type.name,
                     start_time=now,
                 )
@@ -117,12 +119,13 @@ class TrackingService:
         await self.ensure_user(member)
 
         for activity in self._relevant_activities(member).values():
-            open_session = await self.activities.get_open_session(member.id, activity.name)
+            normalized = _normalize_activity_name(activity.name)
+            open_session = await self.activities.get_open_session(member.id, normalized)
             if open_session is None:
                 await self.activities.start_session(
                     user_id=member.id,
                     guild_id=member.guild.id,
-                    activity_name=activity.name,
+                    activity_name=normalized,
                     activity_type=activity.type.name,
                     start_time=now,
                 )
@@ -153,7 +156,6 @@ class TrackingService:
             name = getattr(activity, "name", None)
             if not name:
                 continue
-            name = name.strip()
-            key = f"{activity.type.name}:{name}"
+            key = f"{activity.type.name}:{_normalize_activity_name(name)}"
             result[key] = activity
         return result

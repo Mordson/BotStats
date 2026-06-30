@@ -11,12 +11,42 @@ inny silnik), zmiany powinny dotyczyć tylko tego pliku.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import ActivitySession, User, VoiceSession
+
+
+def _normalize_activity_name(name: str) -> str:
+    """Usuwa znaki towarowe i normalizuje separatory podtytułów.
+
+    Np. 'Call of Duty® Black Ops 7' i 'Call of Duty: Black Ops 7'
+    są traktowane jako ta sama gra.
+    """
+    name = re.sub(r'[®™℠]', '', name)
+    name = name.replace(': ', ' ')
+    return re.sub(r'\s+', ' ', name).strip()
+
+
+def _aggregate_by_normalized_name(
+    rows: list[tuple[str, int]],
+    limit: int | None = None,
+) -> list[tuple[str, int]]:
+    """Scala wiersze (nazwa, sekundy) grupując po znormalizowanej nazwie, sortuje malejąco."""
+    totals: dict[str, int] = {}
+    canonical: dict[str, str] = {}
+    for name, seconds in rows:
+        key = _normalize_activity_name(name).lower()
+        totals[key] = totals.get(key, 0) + (seconds or 0)
+        if key not in canonical:
+            canonical[key] = _normalize_activity_name(name)
+    sorted_games = sorted(totals.items(), key=lambda x: x[1], reverse=True)
+    if limit is not None:
+        sorted_games = sorted_games[:limit]
+    return [(canonical[key], total) for key, total in sorted_games]
 
 
 def _as_aware_utc(value: datetime) -> datetime:
@@ -176,32 +206,23 @@ class ActivitySessionRepository:
 
     async def top_games(self, limit: int = 10) -> list[tuple[str, int]]:
         """Ranking gier (activity_type == 'playing') po sumarycznym czasie gry."""
-        total = func.sum(ActivitySession.duration_seconds)
-        group_key = func.lower(func.trim(ActivitySession.activity_name))
         result = await self.session.execute(
-            select(func.min(ActivitySession.activity_name), total)
+            select(ActivitySession.activity_name, ActivitySession.duration_seconds)
             .where(
                 ActivitySession.activity_type == "playing",
                 ActivitySession.duration_seconds.is_not(None),
             )
-            .group_by(group_key)
-            .order_by(total.desc())
-            .limit(limit)
         )
-        return [(name, seconds or 0) for name, seconds in result.all()]
+        return _aggregate_by_normalized_name(result.all(), limit)
 
     async def total_game_time_by_user(self, user_id: int) -> list[tuple[str, int]]:
         """Czas gry danego użytkownika, pogrupowany po nazwie gry."""
-        total = func.sum(ActivitySession.duration_seconds)
-        group_key = func.lower(func.trim(ActivitySession.activity_name))
         result = await self.session.execute(
-            select(func.min(ActivitySession.activity_name), total)
+            select(ActivitySession.activity_name, ActivitySession.duration_seconds)
             .where(
                 ActivitySession.user_id == user_id,
                 ActivitySession.activity_type == "playing",
                 ActivitySession.duration_seconds.is_not(None),
             )
-            .group_by(group_key)
-            .order_by(total.desc())
         )
-        return [(name, seconds or 0) for name, seconds in result.all()]
+        return _aggregate_by_normalized_name(result.all())

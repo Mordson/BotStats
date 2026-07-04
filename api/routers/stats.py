@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,9 +38,10 @@ async def voice_time_leaderboard(
 @router.get("/top-games", response_model=list[GameTimeOut])
 async def top_games(
     limit: int = 10,
+    since: datetime | None = None,
     session: AsyncSession = Depends(get_db_session),
 ) -> list[GameTimeOut]:
     """Ranking gier po sumarycznym czasie gry wszystkich użytkowników."""
     repo = ActivitySessionRepository(session)
-    rows = await repo.top_games(limit=limit)
+    rows = await repo.top_games(limit=limit, since=since)
     return [GameTimeOut(activity_name=name, total_seconds=seconds) for name, seconds in rows]

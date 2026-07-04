@@ -204,14 +204,17 @@ class ActivitySessionRepository:
             session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
         await self.session.flush()
 
-    async def top_games(self, limit: int = 10) -> list[tuple[str, int]]:
+    async def top_games(self, limit: int = 10, since: datetime | None = None) -> list[tuple[str, int]]:
         """Ranking gier (activity_type == 'playing') po sumarycznym czasie gry."""
+        conditions = [
+            ActivitySession.activity_type == "playing",
+            ActivitySession.duration_seconds.is_not(None),
+        ]
+        if since is not None:
+            conditions.append(ActivitySession.start_time >= since)
         result = await self.session.execute(
             select(ActivitySession.activity_name, ActivitySession.duration_seconds)
-            .where(
-                ActivitySession.activity_type == "playing",
-                ActivitySession.duration_seconds.is_not(None),
-            )
+            .where(*conditions)
         )
         return _aggregate_by_normalized_name(result.all(), limit)
 

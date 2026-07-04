@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timedelta, timezone
 
 import altair as alt
 import pandas as pd
@@ -60,11 +61,25 @@ with tab_voice:
     else:
         st.info("Brak danych — bot jeszcze nie zarejestrował żadnych sesji głosowych.")
 
+TIME_RANGES = {
+    "Ostatnie 24H": timedelta(hours=24),
+    "Ostatni tydzień": timedelta(weeks=1),
+    "Ostatni miesiąc": timedelta(days=30),
+    "Ostatnie pół roku": timedelta(days=182),
+    "Ostatni rok": timedelta(days=365),
+}
+
 with tab_games:
     st.header("Ranking gier — łączny czas wszystkich użytkowników")
 
-    limit = st.slider("Liczba gier", min_value=5, max_value=50, value=10, step=5)
-    data = fetch("/stats/top-games", params={"limit": limit})
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        limit = st.slider("Liczba gier", min_value=5, max_value=50, value=10, step=5)
+    with col2:
+        time_range_label = st.selectbox("Przedział czasowy", list(TIME_RANGES.keys()))
+
+    since = datetime.now(timezone.utc) - TIME_RANGES[time_range_label]
+    data = fetch("/stats/top-games", params={"limit": limit, "since": since.isoformat()})
 
     if data:
         df = pd.DataFrame(data)

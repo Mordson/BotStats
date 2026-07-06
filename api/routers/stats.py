@@ -16,12 +16,14 @@ router = APIRouter(prefix="/stats", tags=["stats"])
 
 @router.get("/voice-time", response_model=list[VoiceTimeOut])
 async def voice_time_leaderboard(
-    session: AsyncSession = Depends(get_db_session),) -> list[VoiceTimeOut]:
+    since: datetime | None = None,
+    session: AsyncSession = Depends(get_db_session),
+) -> list[VoiceTimeOut]:
     """Ranking użytkowników po sumarycznym czasie spędzonym na kanałach głosowych."""
     voice_repo = VoiceSessionRepository(session)
     user_repo = UserRepository(session)
 
-    rows = await voice_repo.total_time_by_user()
+    rows = await voice_repo.total_time_by_user(since=since)
     users_by_id = {user.id: user for user in await user_repo.get_all()}
 
     result = [

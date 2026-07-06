@@ -140,11 +140,14 @@ class VoiceSessionRepository:
         await self.session.flush()
 
 
-    async def total_time_by_user(self) -> list[tuple[int, int]]:
+    async def total_time_by_user(self, since: datetime | None = None) -> list[tuple[int, int]]:
         """Suma czasu (w sekundach) na kanałach głosowych, pogrupowana po użytkowniku."""
+        conditions = [VoiceSession.duration_seconds.is_not(None)]
+        if since is not None:
+            conditions.append(VoiceSession.start_time >= since)
         result = await self.session.execute(
             select(VoiceSession.user_id, func.sum(VoiceSession.duration_seconds))
-            .where(VoiceSession.duration_seconds.is_not(None))
+            .where(*conditions)
             .group_by(VoiceSession.user_id)
         )
         return [(user_id, total or 0) for user_id, total in result.all()]

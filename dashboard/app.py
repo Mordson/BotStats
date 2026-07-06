@@ -47,10 +47,21 @@ st.title("🎮 Discord Activity Dashboard")
 
 tab_voice, tab_games, tab_user = st.tabs(["🔊 Czas głosowy", "🕹️ Top gry", "👤 Użytkownik"])
 
+TIME_RANGES = {
+    "Ostatnie 24H": timedelta(hours=24),
+    "Ostatni tydzień": timedelta(weeks=1),
+    "Ostatni miesiąc": timedelta(days=30),
+    "Ostatnie pół roku": timedelta(days=182),
+    "Ostatni rok": timedelta(days=365),
+}
+
 with tab_voice:
     st.header("Ranking — czas na kanałach głosowych")
 
-    data = fetch("/stats/voice-time")
+    voice_time_range_label = st.selectbox("Przedział czasowy", list(TIME_RANGES.keys()), key="voice_time_range")
+    voice_since = datetime.now(timezone.utc) - TIME_RANGES[voice_time_range_label]
+
+    data = fetch("/stats/voice-time", params={"since": voice_since.isoformat()})
     if data:
         df = pd.DataFrame(data)
         df["Godziny"] = df["total_seconds"].apply(seconds_to_hours)
@@ -60,14 +71,6 @@ with tab_voice:
         st.dataframe(df, use_container_width=True, hide_index=True)
     else:
         st.info("Brak danych — bot jeszcze nie zarejestrował żadnych sesji głosowych.")
-
-TIME_RANGES = {
-    "Ostatnie 24H": timedelta(hours=24),
-    "Ostatni tydzień": timedelta(weeks=1),
-    "Ostatni miesiąc": timedelta(days=30),
-    "Ostatnie pół roku": timedelta(days=182),
-    "Ostatni rok": timedelta(days=365),
-}
 
 with tab_games:
     st.header("Ranking gier — łączny czas wszystkich użytkowników")

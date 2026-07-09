@@ -49,5 +49,15 @@ services:
     ports:
       - "8501:8501"
 
+  dashboard-html:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile.static
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
 volumes:
   pgdata:

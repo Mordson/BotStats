@@ -30,6 +30,12 @@ def seconds_to_hours(seconds: int) -> float:
     return round(seconds / 3600, 2)
 
 
+def seconds_to_hm(seconds: int) -> str:
+    total_minutes = round(seconds / 60)
+    h, m = divmod(total_minutes, 60)
+    return f"{h} h {m:02d} min"
+
+
 def bar_chart(df: pd.DataFrame, x_col: str, y_col: str = "Godziny") -> None:
     chart = (
         alt.Chart(df)
@@ -65,10 +71,11 @@ with tab_voice:
     if data:
         df = pd.DataFrame(data)
         df["Godziny"] = df["total_seconds"].apply(seconds_to_hours)
-        df = df.rename(columns={"display_name": "Użytkownik"})[["Użytkownik", "Godziny"]]
+        df["Czas"] = df["total_seconds"].apply(seconds_to_hm)
+        df = df.rename(columns={"display_name": "Użytkownik"})[["Użytkownik", "Godziny", "Czas"]]
 
         bar_chart(df, "Użytkownik")
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df[["Użytkownik", "Czas"]], use_container_width=True, hide_index=True)
     else:
         st.info("Brak danych — bot jeszcze nie zarejestrował żadnych sesji głosowych.")
 
@@ -87,10 +94,11 @@ with tab_games:
     if data:
         df = pd.DataFrame(data)
         df["Godziny"] = df["total_seconds"].apply(seconds_to_hours)
-        df = df.rename(columns={"activity_name": "Gra"})[["Gra", "Godziny"]]
+        df["Czas"] = df["total_seconds"].apply(seconds_to_hm)
+        df = df.rename(columns={"activity_name": "Gra"})[["Gra", "Godziny", "Czas"]]
 
         bar_chart(df, "Gra")
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df[["Gra", "Czas"]], use_container_width=True, hide_index=True)
     else:
         st.info("Brak danych — bot jeszcze nie zarejestrował żadnych aktywności.")
 
@@ -109,11 +117,12 @@ with tab_user:
         if games:
             df = pd.DataFrame(games)
             df["Godziny"] = df["total_seconds"].apply(seconds_to_hours)
-            df = df.rename(columns={"activity_name": "Gra"})[["Gra", "Godziny"]]
+            df["Czas"] = df["total_seconds"].apply(seconds_to_hm)
+            df = df.rename(columns={"activity_name": "Gra"})[["Gra", "Godziny", "Czas"]]
             df = df.sort_values("Godziny", ascending=False)
 
             st.subheader(f"Gry — {selected_name}")
             bar_chart(df, "Gra")
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(df[["Gra", "Czas"]], use_container_width=True, hide_index=True)
         else:
             st.info(f"{selected_name} nie ma jeszcze żadnych zarejestrowanych aktywności.")

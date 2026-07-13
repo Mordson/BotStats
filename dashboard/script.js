@@ -32,12 +32,11 @@
     return PALETTE[h % PALETTE.length];
   }
 
-  function secondsToHours(s) {
-    return Math.round((s / 3600) * 10) / 10;
-  }
-
   function fmtHours(s) {
-    return `${secondsToHours(s).toLocaleString('pl-PL')} h`;
+    const totalMinutes = Math.round(s / 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${h} h ${String(m).padStart(2, '0')} min`;
   }
 
   function sinceIso(hours) {

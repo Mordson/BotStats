@@ -409,7 +409,7 @@
   function initUserSelect() {
     const select = $('#userSelect');
     select.addEventListener('change', () => {
-      state.selectedUserId = Number(select.value);
+      state.selectedUserId = select.value;
       renderUserTab();
     });
   }

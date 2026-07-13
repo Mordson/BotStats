@@ -1,5 +1,5 @@
 (() => {
-  const API_URL = 'https://aplikacj.tojest.dev';
+  const API_URL = 'https://api.amordka.com';
 
   const PALETTE = ['#00e5ff', '#8b5cff', '#ff2d95', '#22d3a8', '#ffb020', '#4f8cff', '#ff6fae', '#b6ff3f'];
   const GRAY = '#4a5568';

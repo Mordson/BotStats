@@ -1,5 +1,5 @@
 (() => {
-  const API_URL = 'https://aplikacj.tojest.dev';
+  const API_URL = 'https://api.amordka.com';
 
   const PALETTE = ['#00e5ff', '#8b5cff', '#ff2d95', '#22d3a8', '#ffb020', '#4f8cff', '#ff6fae', '#b6ff3f'];
   const GRAY = '#4a5568';
@@ -32,12 +32,11 @@
     return PALETTE[h % PALETTE.length];
   }
 
-  function secondsToHours(s) {
-    return Math.round((s / 3600) * 10) / 10;
-  }
-
   function fmtHours(s) {
-    return `${secondsToHours(s).toLocaleString('pl-PL')} h`;
+    const totalMinutes = Math.round(s / 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${h} h ${String(m).padStart(2, '0')} min`;
   }
 
   function sinceIso(hours) {
@@ -410,7 +409,7 @@
   function initUserSelect() {
     const select = $('#userSelect');
     select.addEventListener('change', () => {
-      state.selectedUserId = Number(select.value);
+      state.selectedUserId = select.value;
       renderUserTab();
     });
   }

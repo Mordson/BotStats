@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Discord Activity Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="banner">
+  <span id="bannerText"></span>
+  <button id="bannerClose" aria-label="Zamknij">&times;</button>
+</div>
+
+<div class="page">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">◆</div>
+      <div class="brand-text">
+        <h1>Discord Activity Dashboard</h1>
+        <p>Statystyki aktywności serwera</p>
+      </div>
+    </div>
+    <div class="topbar-controls">
+      <div>
+        <span class="field-label">Przedział czasowy</span>
+        <select id="timeRange"></select>
+      </div>
+      <button class="icon-btn" id="refreshBtn" title="Odśwież">⟳</button>
+    </div>
+  </header>
+
+  <section class="cards">
+    <div class="card">
+      <div class="card-label">Czas głosowy</div>
+      <div class="card-value skeleton" id="cardVoiceTime">–</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Aktywni gracze</div>
+      <div class="card-value skeleton" id="cardActivePlayers">–</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Najpopularniejsza gra</div>
+      <div class="card-value skeleton" id="cardTopGame">–</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Śledzone gry</div>
+      <div class="card-value skeleton" id="cardTrackedGames">–</div>
+    </div>
+  </section>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="voice">🔊 Czas głosowy</button>
+    <button class="tab" data-tab="games">🕹️ Top gry</button>
+    <button class="tab" data-tab="user">👤 Użytkownik</button>
+  </nav>
+
+  <main>
+    <section class="panel" id="panel-voice">
+      <div class="panel-head">
+        <h2>Ranking — czas na kanałach głosowych</h2>
+      </div>
+      <div id="voiceContent"><div class="loading-state">Ładowanie…</div></div>
+    </section>
+
+    <section class="panel" id="panel-games" hidden>
+      <div class="panel-head">
+        <h2>Ranking gier — łączny czas wszystkich użytkowników</h2>
+        <div>
+          <span class="field-label">Liczba gier</span>
+          <select id="gamesLimit">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="15">15</option>
+            <option value="20">20</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+          </select>
+        </div>
+      </div>
+      <div id="gamesContent"><div class="loading-state">Ładowanie…</div></div>
+    </section>
+
+    <section class="panel" id="panel-user" hidden>
+      <div class="panel-head">
+        <h2>Statystyki użytkownika</h2>
+        <div>
+          <span class="field-label">Wybierz użytkownika</span>
+          <select id="userSelect"></select>
+        </div>
+      </div>
+      <div id="userContent"><div class="loading-state">Ładowanie…</div></div>
+    </section>
+  </main>
+
+</div>
+
+<footer>Dane pobierane z API: <span class="mono" id="apiUrlLabel"></span></footer>
+
+<script src="script.js"></script>
+</body>
+</html>

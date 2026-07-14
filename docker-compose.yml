@@ -43,21 +43,11 @@ services:
       context: ./dashboard
     restart: unless-stopped
     environment:
-      API_URL: http://api:8000
+      API_INTERNAL_URL: http://api:8000
     depends_on:
       - api
     ports:
-      - "8501:8501"
-
-  dashboard-html:
-    build:
-      context: ./dashboard
-      dockerfile: Dockerfile.static
-    restart: unless-stopped
-    depends_on:
-      - api
-    ports:
-      - "8080:80"
+      - "8080:3000"
 
 volumes:
   pgdata:

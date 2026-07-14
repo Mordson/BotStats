@@ -101,7 +101,12 @@ Then:
 docker compose up --build
 ```
 
-This starts PostgreSQL, the bot, the API (port `8000`), and the dashboard (port `8501`).
+This starts PostgreSQL, the bot, the API (port `8000`), and the dashboard (port `8080`).
+
+The dashboard is a Next.js app (server-rendered React, `dashboard/`) that talks to the API only
+server-side (`API_INTERNAL_URL`, defaults to `http://api:8000` inside Docker) — the browser never
+calls the API directly, it only ever hits same-origin `/api/...` routes proxied by the dashboard
+server.
 
 ## API endpoints (for the dashboard)
 

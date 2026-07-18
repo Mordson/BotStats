@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_db_session
 from api.schemas import GameTimeOut, VoiceTimeOut
+from config import settings
 from core.repositories import ActivitySessionRepository, UserRepository, VoiceSessionRepository
 
 router = APIRouter(prefix="/stats", tags=["stats"])
@@ -43,7 +44,7 @@ async def top_games(
     since: datetime | None = None,
     session: AsyncSession = Depends(get_db_session),
 ) -> list[GameTimeOut]:
-    """Ranking gier po sumarycznym czasie gry wszystkich użytkowników."""
+    """Ranking gier po sumarycznym czasie gry użytkowników z widocznymi rolami."""
     repo = ActivitySessionRepository(session)
-    rows = await repo.top_games(limit=limit, since=since)
+    rows = await repo.top_games(limit=limit, since=since, role_ids=settings.visible_role_ids_list or None)
     return [GameTimeOut(activity_name=name, total_seconds=seconds) for name, seconds in rows]

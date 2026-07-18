@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.database import Base
@@ -27,6 +28,9 @@ class User(Base):
     first_seen: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now()
     )
+    # Aktualne ID ról użytkownika na serwerze (odświeżane przy każdej synchronizacji
+    # membera), używane do filtrowania widoczności w sekcjach z grami dashboardu.
+    role_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), default=list, server_default="{}")
 
     voice_sessions: Mapped[list["VoiceSession"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

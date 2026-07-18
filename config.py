@@ -22,7 +22,16 @@ class Settings(BaseSettings):
     # Opcjonalnie: ogranicz API do konkretnej domeny dashboardu
     cors_origins: str = "*"
 
+    # ID ról Discord (CSV), które uprawniają do pokazania się w sekcjach z grami
+    # dashboardu (ranking gier, statystyki gier użytkownika).
+    # Puste = brak filtrowania (pokazywani są wszyscy).
+    visible_role_ids: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @property
+    def visible_role_ids_list(self) -> list[int]:
+        return [int(role_id) for role_id in self.visible_role_ids.split(",") if role_id.strip()]
 
 
 settings = Settings()

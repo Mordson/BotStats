@@ -7,16 +7,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_db_session
 from api.schemas import UserGameTimeOut, UserOut
+from config import settings
+from core.models import User
 from core.repositories import ActivitySessionRepository, UserRepository
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+def _is_visible(user: User) -> bool:
+    """Sprawdza, czy użytkownik ma widoczne role (czy powinien być uwzględniony w statystykach)."""
+    visible_role_ids = settings.visible_role_ids_list
+    if not visible_role_ids:
+        return True
+    return any(role_id in visible_role_ids for role_id in user.role_ids)
+
+
 @router.get("/", response_model=list[UserOut])
 async def list_users(session: AsyncSession = Depends(get_db_session)) -> list[UserOut]:
-    """Lista wszystkich znanych użytkowników serwera."""
+    """Lista użytkowników z widocznymi rolami (zasila selektor w sekcji gier)."""
     repo = UserRepository(session)
-    users = await repo.get_all()
+    users = await repo.get_all(role_ids=settings.visible_role_ids_list or None)
     return [UserOut.model_validate(user) for user in users]
 
 
@@ -34,6 +44,11 @@ async def user_game_time(
     user_id: int, session: AsyncSession = Depends(get_db_session)
 ) -> list[UserGameTimeOut]:
     """Czas gry danego użytkownika w poszczególnych grach (sekundy)."""
+    user_repo = UserRepository(session)
+    user = await user_repo.get_by_id(user_id)
+    if user is None or not _is_visible(user):
+        raise HTTPException(status_code=404, detail="Użytkownik nie znaleziony")
+
     repo = ActivitySessionRepository(session)
     rows = await repo.total_game_time_by_user(user_id)
     return [UserGameTimeOut(activity_name=name, total_seconds=seconds) for name, seconds in rows]

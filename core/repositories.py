@@ -71,20 +71,26 @@ class UserRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get_or_create(self, user_id: int, username: str, display_name: str) -> User:
+    async def get_or_create(
+        self, user_id: int, username: str, display_name: str, role_ids: list[int]
+    ) -> User:
         """Zwraca istniejącego użytkownika albo tworzy nowy wpis i odświeża dane profilu."""
         user = await self.session.get(User, user_id)
         if user is None:
-            user = User(id=user_id, username=username, display_name=display_name)
+            user = User(id=user_id, username=username, display_name=display_name, role_ids=role_ids)
             self.session.add(user)
             await self.session.flush()
         else:
             user.username = username
             user.display_name = display_name
+            user.role_ids = role_ids
         return user
 
-    async def get_all(self) -> list[User]:
-        result = await self.session.execute(select(User).order_by(User.display_name))
+    async def get_all(self, role_ids: list[int] | None = None) -> list[User]:
+        query = select(User).order_by(User.display_name)
+        if role_ids:
+            query = query.where(User.role_ids.overlap(role_ids))
+        result = await self.session.execute(query)
         return list(result.scalars().all())
 
     async def get_by_id(self, user_id: int) -> User | None:
@@ -207,7 +213,12 @@ class ActivitySessionRepository:
             session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
         await self.session.flush()
 
-    async def top_games(self, limit: int = 10, since: datetime | None = None) -> list[tuple[str, int]]:
+    async def top_games(
+        self,
+        limit: int = 10,
+        since: datetime | None = None,
+        role_ids: list[int] | None = None,
+    ) -> list[tuple[str, int]]:
         """Ranking gier (activity_type == 'playing') po sumarycznym czasie gry."""
         conditions = [
             ActivitySession.activity_type == "playing",
@@ -215,10 +226,12 @@ class ActivitySessionRepository:
         ]
         if since is not None:
             conditions.append(ActivitySession.start_time >= since)
-        result = await self.session.execute(
-            select(ActivitySession.activity_name, ActivitySession.duration_seconds)
-            .where(*conditions)
-        )
+        query = select(ActivitySession.activity_name, ActivitySession.duration_seconds).where(*conditions)
+        if role_ids:
+            query = query.join(User, User.id == ActivitySession.user_id).where(
+                User.role_ids.overlap(role_ids)
+            )
+        result = await self.session.execute(query)
         return _aggregate_by_normalized_name(result.all(), limit)
 
     async def total_game_time_by_user(self, user_id: int) -> list[tuple[str, int]]:

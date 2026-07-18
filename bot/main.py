@@ -44,6 +44,7 @@ bot = commands.Bot(command_prefix="!", intents=build_intents())
 EXTENSIONS = [
     "bot.cogs.voice_tracker",
     "bot.cogs.presence_tracker",
+    "bot.cogs.member_tracker",
 ]
 
 

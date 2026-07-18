@@ -27,8 +27,14 @@ class TrackingService:
         self.activities = ActivitySessionRepository(session)
 
     async def ensure_user(self, member: discord.Member) -> None:
-        """Upewnia się, że użytkownik istnieje w bazie (i aktualizuje jego nazwę)."""
-        await self.users.get_or_create(member.id, str(member), member.display_name)
+        """Upewnia się, że użytkownik istnieje w bazie (i aktualizuje jego nazwę oraz role)."""
+        role_ids = [role.id for role in member.roles]
+        await self.users.get_or_create(member.id, str(member), member.display_name, role_ids)
+
+    async def sync_member(self, member: discord.Member) -> None:
+        """Odświeża profil i role użytkownika (np. po zmianie ról) i zapisuje zmiany."""
+        await self.ensure_user(member)
+        await self.session.commit()
 
     async def handle_voice_state_update(
         self,

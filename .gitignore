@@ -3,6 +3,7 @@ __pycache__/
 .env
 .venv/
 venv/
+
 *.egg-info/
 .pytest_cache/
 *.dump
@@ -13,3 +14,5 @@ node_modules/
 CLAUDE.md
 
 .claude
+
+.venv-1

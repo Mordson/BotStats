@@ -1,9 +1,9 @@
 """
-Schematy odpowiedzi API (DTO / Pydantic).
+API response schemas (DTO / Pydantic).
 
-Oddzielają model bazy danych (core/models.py) od kontraktu API,
-żeby zmiany w bazie nie wpływały bezpośrednio na dashboard
-i odwrotnie.
+Decouple the database model (core/models.py) from the API contract,
+so changes to the database don't directly affect the dashboard
+and vice versa.
 """
 
 from __future__ import annotations
@@ -23,8 +23,8 @@ class UserOut(BaseModel):
 
     @field_serializer("id")
     def serialize_id(self, value: int) -> str:
-        # ID Discorda (snowflake) przekraczają bezpieczny zakres liczb w JS (2^53),
-        # więc muszą trafiać do frontendu jako string, nie liczba JSON.
+        # Discord IDs (snowflakes) exceed JS's safe integer range (2^53),
+        # so they must reach the frontend as a string, not a JSON number.
         return str(value)
 
 

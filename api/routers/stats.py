@@ -1,4 +1,4 @@
-"""Endpointy API ze statystykami zbiorczymi (dla dashboardu)."""
+"""API endpoints with aggregate statistics (for the dashboard)."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ async def voice_time_leaderboard(
     since: datetime | None = None,
     session: AsyncSession = Depends(get_db_session),
 ) -> list[VoiceTimeOut]:
-    """Ranking użytkowników po sumarycznym czasie spędzonym na kanałach głosowych."""
+    """User leaderboard by total time spent in voice channels."""
     voice_repo = VoiceSessionRepository(session)
     user_repo = UserRepository(session)
 
@@ -44,7 +44,7 @@ async def top_games(
     since: datetime | None = None,
     session: AsyncSession = Depends(get_db_session),
 ) -> list[GameTimeOut]:
-    """Ranking gier po sumarycznym czasie gry użytkowników z widocznymi rolami."""
+    """Game leaderboard by total play time of users with visible roles."""
     repo = ActivitySessionRepository(session)
     rows = await repo.top_games(limit=limit, since=since, role_ids=settings.visible_role_ids_list or None)
     return [GameTimeOut(activity_name=name, total_seconds=seconds) for name, seconds in rows]

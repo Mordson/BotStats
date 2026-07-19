@@ -1,12 +1,12 @@
 """
-Warstwa serwisowa (Service layer).
+Service layer.
 
-`TrackingService` zawiera logikę biznesową łączącą eventy z discord.py
-z repozytoriami. To jedyne miejsce, które "wie", jak interpretować
-zmiany VoiceState/Presence i przekładać je na sesje w bazie danych.
+`TrackingService` contains the business logic connecting discord.py events
+to the repositories. It is the only place that "knows" how to interpret
+VoiceState/Presence changes and translate them into database sessions.
 
-Cogi (bot/cogs/) powinny być "głupie" - tylko nasłuchują eventów
-i wywołują metody tego serwisu.
+Cogs (bot/cogs/) should be "dumb" - they only listen for events
+and call methods on this service.
 """
 
 from __future__ import annotations
@@ -27,12 +27,12 @@ class TrackingService:
         self.activities = ActivitySessionRepository(session)
 
     async def ensure_user(self, member: discord.Member) -> None:
-        """Upewnia się, że użytkownik istnieje w bazie (i aktualizuje jego nazwę oraz role)."""
+        """Ensures the user exists in the database (and updates their name and roles)."""
         role_ids = [role.id for role in member.roles]
         await self.users.get_or_create(member.id, str(member), member.display_name, role_ids)
 
     async def sync_member(self, member: discord.Member) -> None:
-        """Odświeża profil i role użytkownika (np. po zmianie ról) i zapisuje zmiany."""
+        """Refreshes the user's profile and roles (e.g. after a role change) and saves the changes."""
         await self.ensure_user(member)
         await self.session.commit()
 
@@ -43,10 +43,10 @@ class TrackingService:
         after: discord.VoiceState,
     ) -> None:
         """
-        Obsługuje on_voice_state_update:
-        - wejście na kanał -> otwiera nową sesję,
-        - wyjście z kanału / zmiana kanału -> zamyka poprzednią sesję,
-        - zmiana kanału -> zamyka starą i otwiera nową (jedna sesja per kanał).
+        Handles on_voice_state_update:
+        - joining a channel -> opens a new session,
+        - leaving a channel / switching channels -> closes the previous session,
+        - switching channels -> closes the old one and opens a new one (one session per channel).
         """
         now = datetime.now(timezone.utc)
         await self.ensure_user(member)
@@ -81,9 +81,9 @@ class TrackingService:
         after: discord.Member,
     ) -> None:
         """
-        Obsługuje on_presence_update:
-        porównuje aktywności (gry, streaming, Spotify itd.) przed i po,
-        zamykając/otwierając odpowiednie sesje w activity_sessions.
+        Handles on_presence_update:
+        compares activities (games, streaming, Spotify, etc.) before and after,
+        closing/opening the corresponding sessions in activity_sessions.
         """
         now = datetime.now(timezone.utc)
         await self.ensure_user(after)
@@ -91,7 +91,7 @@ class TrackingService:
         before_activities = self._relevant_activities(before)
         after_activities = self._relevant_activities(after)
 
-        # Aktywności, które się zakończyły
+        # Activities that ended
         for key, activity in before_activities.items():
             if key not in after_activities:
                 open_session = await self.activities.get_open_session(
@@ -100,7 +100,7 @@ class TrackingService:
                 if open_session is not None:
                     await self.activities.close_session(open_session, now)
 
-        # Aktywności, które się zaczęły
+        # Activities that started
         for key, activity in after_activities.items():
             if key not in before_activities:
                 await self.activities.start_session(
@@ -115,11 +115,11 @@ class TrackingService:
 
     async def sync_member_activities(self, member: discord.Member) -> None:
         """
-        Otwiera sesje dla aktywności aktualnie trwających w momencie wywołania.
+        Opens sessions for activities currently in progress at the time of the call.
 
-        Wywoływane przy starcie bota, żeby nie pominąć aktywności rozpoczętych
-        przed uruchomieniem bota (bot nie dostaje on_presence_update dla już
-        trwających aktywności - tylko dla zmian).
+        Called on bot startup, so activities that started before the bot came
+        online aren't missed (the bot doesn't get on_presence_update for
+        already-ongoing activities - only for changes).
         """
         now = datetime.now(timezone.utc)
         await self.ensure_user(member)
@@ -138,9 +138,9 @@ class TrackingService:
 
     async def cleanup_open_sessions(self) -> None:
         """
-        Zamyka wszystkie sesje pozostawione "otwarte" (np. po crashu/restarcie bota),
-        żeby nie zaburzały statystyk nieskończonym czasem trwania.
-        Wywoływane raz, w on_ready.
+        Closes all sessions left "open" (e.g. after a bot crash/restart),
+        so they don't skew statistics with an infinite duration.
+        Called once, in on_ready.
         """
         now = datetime.now(timezone.utc)
         await self.voice.close_all_open(now)
@@ -150,10 +150,10 @@ class TrackingService:
     @staticmethod
     def _relevant_activities(member: discord.Member) -> dict[str, discord.BaseActivity]:
         """
-        Filtruje aktywności użytkownika do tych, które chcemy śledzić.
+        Filters the user's activities down to the ones we want to track.
 
-        Pomija ActivityType.custom (status własny, np. "🎧 w skupieniu"),
-        bo zmienia się bardzo często i nie reprezentuje "gry"/aktywności.
+        Skips ActivityType.custom (a custom status, e.g. "🎧 focusing"),
+        since it changes very often and doesn't represent a "game"/activity.
         """
         result: dict[str, discord.BaseActivity] = {}
         for activity in member.activities:

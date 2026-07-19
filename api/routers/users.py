@@ -1,4 +1,4 @@
-"""Endpointy API związane z użytkownikami."""
+"""API endpoints related to users."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.get("/", response_model=list[UserOut])
 async def list_users(session: AsyncSession = Depends(get_db_session)) -> list[UserOut]:
-    """Lista wszystkich znanych użytkowników serwera."""
+    """List of all known guild users."""
     repo = UserRepository(session)
     users = await repo.get_all()
     return [UserOut.model_validate(user) for user in users]
@@ -33,7 +33,7 @@ async def get_user(user_id: int, session: AsyncSession = Depends(get_db_session)
 async def user_game_time(
     user_id: int, session: AsyncSession = Depends(get_db_session)
 ) -> list[UserGameTimeOut]:
-    """Czas gry danego użytkownika w poszczególnych grach (sekundy)."""
+    """The given user's play time per game (seconds)."""
     repo = ActivitySessionRepository(session)
     rows = await repo.total_game_time_by_user(user_id)
     return [UserGameTimeOut(activity_name=name, total_seconds=seconds) for name, seconds in rows]

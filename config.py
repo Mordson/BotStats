@@ -1,30 +1,30 @@
 """
-Centralna konfiguracja aplikacji.
+Central application configuration.
 
-Współdzielona przez bota (bot/) i API (api/), dzięki czemu obie części
-korzystają z tych samych ustawień (np. connection string do bazy danych).
+Shared by the bot (bot/) and the API (api/), so both parts use the same
+settings (e.g. the database connection string).
 """
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # Token bota Discord (z Discord Developer Portal)
+    # Discord bot token (from the Discord Developer Portal)
     discord_token: str
 
-    # ID serwera Discord do śledzenia (prawy klik na serwer -> Kopiuj ID)
-    # Jeśli nie ustawione, bot śledzi wszystkie serwery (niezalecane)
+    # Discord guild ID to track (right-click the server -> Copy ID)
+    # If not set, the bot tracks all guilds (not recommended)
     guild_id: int | None = None
 
-    # Connection string do PostgreSQL (driver async: asyncpg)
+    # PostgreSQL connection string (async driver: asyncpg)
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/discord_activity"
 
-    # Opcjonalnie: ogranicz API do konkretnej domeny dashboardu
+    # Optional: restrict the API to a specific dashboard domain
     cors_origins: str = "*"
 
-    # ID ról Discord (CSV), które uprawniają do pokazania się w sekcjach z grami
-    # dashboardu (ranking gier, statystyki gier użytkownika).
-    # Puste = brak filtrowania (pokazywani są wszyscy).
+    # Discord role IDs (CSV) allowed to appear in the dashboard's game
+    # sections (game leaderboard, per-user game stats).
+    # Empty = no filtering (everyone is shown).
     visible_role_ids: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

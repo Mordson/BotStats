@@ -1,10 +1,10 @@
 """
-Modele ORM (SQLAlchemy 2.0, styl Mapped/mapped_column).
+ORM models (SQLAlchemy 2.0, Mapped/mapped_column style).
 
-Tabele:
-- users            - użytkownicy Discord widziani na serwerze
-- voice_sessions   - sesje pobytu na kanałach głosowych (do liczenia "czasu na serwerze")
-- activity_sessions - sesje aktywności (np. "Playing Valorant", "Listening to Spotify")
+Tables:
+- users            - Discord users seen on the guild
+- voice_sessions   - sessions of presence in voice channels (for counting "time on server")
+- activity_sessions - activity sessions (e.g. "Playing Valorant", "Listening to Spotify")
 """
 
 from __future__ import annotations
@@ -21,15 +21,15 @@ from core.database import Base
 class User(Base):
     __tablename__ = "users"
 
-    # ID użytkownika Discord (Snowflake) jest jednocześnie naszym PK
+    # The Discord user ID (Snowflake) doubles as our PK
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     username: Mapped[str] = mapped_column(String(100))
     display_name: Mapped[str] = mapped_column(String(100))
     first_seen: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now()
     )
-    # Aktualne ID ról użytkownika na serwerze (odświeżane przy każdej synchronizacji
-    # membera), używane do filtrowania widoczności w sekcjach z grami dashboardu.
+    # The user's current role IDs on the guild (refreshed on every member sync),
+    # used to filter visibility in the dashboard's game sections.
     role_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), default=list, server_default="{}")
 
     voice_sessions: Mapped[list["VoiceSession"]] = relationship(
@@ -44,7 +44,7 @@ class User(Base):
 
 
 class VoiceSession(Base):
-    """Pojedyncza sesja przebywania na kanale głosowym."""
+    """A single session of presence in a voice channel."""
 
     __tablename__ = "voice_sessions"
 
@@ -69,9 +69,9 @@ class VoiceSession(Base):
 
 class ActivitySession(Base):
     """
-    Pojedyncza sesja aktywności (np. gra, status streamingu).
+    A single activity session (e.g. a game, streaming status).
 
-    activity_type odpowiada discord.ActivityType: 'playing', 'streaming',
+    activity_type corresponds to discord.ActivityType: 'playing', 'streaming',
     'listening', 'watching', 'competing'.
     """
 

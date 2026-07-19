@@ -1,4 +1,4 @@
-"""Współdzielone zależności (dependencies) dla endpointów FastAPI."""
+"""Shared dependencies for FastAPI endpoints."""
 
 from __future__ import annotations
 

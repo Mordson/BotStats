@@ -1,8 +1,8 @@
 """
-Cog odpowiedzialny za śledzenie aktywności użytkowników (np. "Playing ...",
+Cog responsible for tracking user activities (e.g. "Playing ...",
 "Streaming ...", "Listening to Spotify").
 
-Wymaga włączonego "Presence Intent" w Discord Developer Portal.
+Requires the "Presence Intent" to be enabled in the Discord Developer Portal.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ logger = logging.getLogger("bot.presence_tracker")
 
 
 class PresenceTrackerCog(commands.Cog):
-    """Nasłuchuje zmian statusu/aktywności użytkowników."""
+    """Listens for user status/activity changes."""
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot

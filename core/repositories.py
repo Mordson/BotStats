@@ -1,12 +1,12 @@
 """
-Warstwa repozytoriów (Repository pattern).
+Repository layer (Repository pattern).
 
-Każde repozytorium odpowiada za zapytania dotyczące jednej tabeli/modelu.
-Dzięki temu warstwa serwisowa (core/services.py) i API (api/) nie piszą
-zapytań SQL/ORM samodzielnie - operują na metodach repozytoriów.
+Each repository is responsible for queries related to a single table/model.
+This way the service layer (core/services.py) and the API (api/) don't write
+SQL/ORM queries themselves - they operate on the repository methods.
 
-Jeśli w przyszłości baza danych się zmieni (np. inna struktura tabel,
-inny silnik), zmiany powinny dotyczyć tylko tego pliku.
+If the database changes in the future (e.g. a different table structure,
+a different engine), the changes should only affect this file.
 """
 
 from __future__ import annotations
@@ -21,10 +21,10 @@ from core.models import ActivitySession, User, VoiceSession
 
 
 def _normalize_activity_name(name: str) -> str:
-    """Usuwa znaki towarowe i normalizuje separatory podtytułów.
+    """Strips trademark symbols and normalizes subtitle separators.
 
-    Np. 'Call of Duty® Black Ops 7' i 'Call of Duty: Black Ops 7'
-    są traktowane jako ta sama gra.
+    E.g. 'Call of Duty® Black Ops 7' and 'Call of Duty: Black Ops 7'
+    are treated as the same game.
     """
     name = re.sub(r'[®™℠]', '', name)
     name = name.replace(': ', ' ')
@@ -35,7 +35,7 @@ def _aggregate_by_normalized_name(
     rows: list[tuple[str, int]],
     limit: int | None = None,
 ) -> list[tuple[str, int]]:
-    """Scala wiersze (nazwa, sekundy) grupując po znormalizowanej nazwie, sortuje malejąco."""
+    """Merges rows (name, seconds) grouping by normalized name, sorted descending."""
     totals: dict[str, int] = {}
     canonical: dict[str, str] = {}
     for name, seconds in rows:
@@ -51,12 +51,12 @@ def _aggregate_by_normalized_name(
 
 def _as_aware_utc(value: datetime) -> datetime:
     """
-    Normalizuje datetime do timezone-aware UTC.
+    Normalizes a datetime to timezone-aware UTC.
 
-    Niektóre bazy/dialekty (np. SQLite) mogą zwracać naiwne datetime
-    nawet jeśli kolumna jest zadeklarowana jako DateTime(timezone=True).
-    Ta funkcja zapewnia, że odejmowanie dwóch znaczników czasu zawsze
-    zadziała, niezależnie od backendu.
+    Some databases/dialects (e.g. SQLite) may return naive datetimes
+    even if the column is declared as DateTime(timezone=True).
+    This function ensures that subtracting two timestamps always
+    works, regardless of the backend.
     """
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
@@ -74,7 +74,7 @@ class UserRepository:
     async def get_or_create(
         self, user_id: int, username: str, display_name: str, role_ids: list[int]
     ) -> User:
-        """Zwraca istniejącego użytkownika albo tworzy nowy wpis i odświeża dane profilu."""
+        """Returns the existing user or creates a new entry and refreshes the profile data."""
         user = await self.session.get(User, user_id)
         if user is None:
             user = User(id=user_id, username=username, display_name=display_name, role_ids=role_ids)
@@ -121,7 +121,7 @@ class VoiceSessionRepository:
         return session_obj
 
     async def get_open_session(self, user_id: int) -> VoiceSession | None:
-        """Znajduje aktualnie otwartą (niezakończoną) sesję głosową użytkownika."""
+        """Finds the user's currently open (unfinished) voice session."""
         result = await self.session.execute(
             select(VoiceSession)
             .where(VoiceSession.user_id == user_id, VoiceSession.end_time.is_(None))
@@ -136,7 +136,7 @@ class VoiceSessionRepository:
         return session_obj
 
     async def close_all_open(self, end_time: datetime) -> None:
-        """Zamyka wszystkie 'osierocone' sesje (np. po restarcie bota)."""
+        """Closes all 'orphaned' sessions (e.g. after a bot restart)."""
         result = await self.session.execute(
             select(VoiceSession).where(VoiceSession.end_time.is_(None))
         )
@@ -147,7 +147,7 @@ class VoiceSessionRepository:
 
 
     async def total_time_by_user(self, since: datetime | None = None) -> list[tuple[int, int]]:
-        """Suma czasu (w sekundach) na kanałach głosowych, pogrupowana po użytkowniku."""
+        """Total time (in seconds) spent in voice channels, grouped by user."""
         conditions = [VoiceSession.duration_seconds.is_not(None)]
         if since is not None:
             conditions.append(VoiceSession.start_time >= since)
@@ -184,10 +184,10 @@ class ActivitySessionRepository:
 
     async def get_open_session(self, user_id: int, activity_name: str) -> ActivitySession | None:
         """
-        Znajduje otwartą sesję dla danej aktywności użytkownika.
+        Finds an open session for the given user activity.
 
-        Użytkownik może mieć kilka otwartych sesji jednocześnie (np. gra +
-        słucha Spotify), więc dopasowujemy po nazwie aktywności.
+        A user can have several open sessions at once (e.g. playing a game +
+        listening to Spotify), so we match by activity name.
         """
         result = await self.session.execute(
             select(ActivitySession).where(
@@ -219,7 +219,7 @@ class ActivitySessionRepository:
         since: datetime | None = None,
         role_ids: list[int] | None = None,
     ) -> list[tuple[str, int]]:
-        """Ranking gier (activity_type == 'playing') po sumarycznym czasie gry."""
+        """Game leaderboard (activity_type == 'playing') by total play time."""
         conditions = [
             ActivitySession.activity_type == "playing",
             ActivitySession.duration_seconds.is_not(None),
@@ -235,7 +235,7 @@ class ActivitySessionRepository:
         return _aggregate_by_normalized_name(result.all(), limit)
 
     async def total_game_time_by_user(self, user_id: int) -> list[tuple[str, int]]:
-        """Czas gry danego użytkownika, pogrupowany po nazwie gry."""
+        """The given user's play time, grouped by game name."""
         result = await self.session.execute(
             select(ActivitySession.activity_name, ActivitySession.duration_seconds)
             .where(

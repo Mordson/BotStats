@@ -1,9 +1,9 @@
 """
-Cog odpowiedzialny za śledzenie zmian ról użytkowników.
+Cog responsible for tracking changes to users' roles.
 
-Voice/presence tracker odświeżają role "przy okazji" (przez ensure_user), ale
-zmiana samych ról (np. nadanie/odebranie rangi) bez zmiany statusu/aktywności
-nie wywołałaby żadnego z tamtych eventów - stąd osobny listener na
+The voice/presence trackers refresh roles "incidentally" (via ensure_user), but
+a role change alone (e.g. granting/removing a rank) without a status/activity
+change wouldn't trigger either of those events - hence a separate listener on
 on_member_update.
 """
 
@@ -22,7 +22,7 @@ logger = logging.getLogger("bot.member_tracker")
 
 
 class MemberTrackerCog(commands.Cog):
-    """Nasłuchuje zmian danych członka serwera (m.in. ról)."""
+    """Listens for changes to a guild member's data (including roles)."""
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot

@@ -1,11 +1,11 @@
 """
-Punkt wejścia bota Discord.
+Entry point for the Discord bot.
 
-Odpowiada za:
-- konfigurację intencji (intents) wymaganych do trackingu,
-- inicjalizację bazy danych,
-- wczytanie cogów (modułów funkcjonalnych),
-- czyszczenie "osieroconych" sesji po restarcie.
+Responsible for:
+- configuring the intents required for tracking,
+- initializing the database,
+- loading the cogs (feature modules),
+- cleaning up "orphaned" sessions after a restart.
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from discord.ext import commands
 from config import settings
 from core.database import async_session, init_db
 
-# WAŻNE: import modeli musi nastąpić PRZED init_db(), żeby ich tabele
-# zostały zarejestrowane na Base.metadata.
+# IMPORTANT: models must be imported BEFORE init_db(), so their tables
+# get registered on Base.metadata.
 from core import models  # noqa: F401
 from core.services import TrackingService
 
@@ -30,9 +30,9 @@ logger = logging.getLogger("bot")
 
 def build_intents() -> discord.Intents:
     intents = discord.Intents.default()
-    # Wymagane do odczytu listy/aktywności członków serwera.
-    # UWAGA: to są "privileged intents" - muszą być włączone
-    # w Discord Developer Portal -> Bot -> Privileged Gateway Intents.
+    # Required to read the guild's member list/activities.
+    # NOTE: these are "privileged intents" - they must be enabled
+    # in the Discord Developer Portal -> Bot -> Privileged Gateway Intents.
     intents.members = True
     intents.presences = True
     intents.voice_states = True
@@ -52,17 +52,17 @@ EXTENSIONS = [
 async def on_ready() -> None:
     logger.info("Zalogowano jako %s (ID: %s)", bot.user, bot.user.id if bot.user else "?")
 
-    # Po (re)starcie zamykamy sesje, które zostały "otwarte" w bazie,
-    # żeby nie liczyły czasu od ostatniego restartu jako jednej sesji.
+    # After a (re)start, close any sessions left "open" in the database,
+    # so they don't count time since the last restart as a single session.
     async with async_session() as session:
         service = TrackingService(session)
         await service.cleanup_open_sessions()
 
     logger.info("Wyczyszczono otwarte sesje pozostałe po poprzednim uruchomieniu.")
 
-    # Otwieramy sesje dla aktywności już trwających w momencie startu bota.
-    # on_presence_update nie jest emitowane dla aktywności, które zaczęły się
-    # przed uruchomieniem bota, więc musimy je zainicjalizować ręcznie.
+    # Open sessions for activities already in progress at bot startup.
+    # on_presence_update isn't emitted for activities that started
+    # before the bot came online, so we have to initialize them manually.
     async with async_session() as session:
         service = TrackingService(session)
         for guild in bot.guilds:

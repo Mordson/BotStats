@@ -1,7 +1,7 @@
 """
-Aplikacja FastAPI - warstwa API udostępniająca dane dla dashboardu.
+FastAPI application - the API layer exposing data to the dashboard.
 
-Uruchomienie (dev):
+Run (dev):
     uvicorn api.main:app --reload
 """
 
@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from core.database import init_db
 
-# WAŻNE: rejestracja modeli na Base.metadata przed init_db()
+# IMPORTANT: register the models on Base.metadata before init_db()
 from core import models  # noqa: F401
 
 from api.routers import stats, users

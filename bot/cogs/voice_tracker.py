@@ -1,8 +1,8 @@
 """
-Cog odpowiedzialny za śledzenie czasu spędzonego na kanałach głosowych.
+Cog responsible for tracking time spent in voice channels.
 
-Sam nie zawiera logiki biznesowej - delegowanie do TrackingService
-(core/services.py) zgodnie z zasadą separacji warstw.
+Contains no business logic itself - delegates to TrackingService
+(core/services.py) following the layer-separation principle.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ logger = logging.getLogger("bot.voice_tracker")
 
 
 class VoiceTrackerCog(commands.Cog):
-    """Nasłuchuje zmian stanu głosowego (wejście/wyjście/zmiana kanału)."""
+    """Listens for voice state changes (join/leave/channel switch)."""
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot

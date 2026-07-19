@@ -1,11 +1,11 @@
 """
-Warstwa dostępu do bazy danych.
+Database access layer.
 
-Definiuje:
-- `Base` - klasę bazową dla modeli ORM (core/models.py),
-- `engine` / `async_session` - silnik i fabrykę sesji SQLAlchemy (async, asyncpg),
-- `init_db()` - tworzenie tabel na podstawie modeli (do dev/testów;
-  w produkcji zaleca się migracje, np. Alembic).
+Defines:
+- `Base` - the base class for the ORM models (core/models.py),
+- `engine` / `async_session` - the SQLAlchemy engine and session factory (async, asyncpg),
+- `init_db()` - creates tables from the models (for dev/tests;
+  migrations, e.g. Alembic, are recommended in production).
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -15,7 +15,7 @@ from config import settings
 
 
 class Base(DeclarativeBase):
-    """Klasa bazowa dla wszystkich modeli ORM."""
+    """Base class for all ORM models."""
 
 
 engine = create_async_engine(settings.database_url, echo=False, future=True)
@@ -25,10 +25,10 @@ async_session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncS
 
 async def init_db() -> None:
     """
-    Tworzy tabele w bazie na podstawie zarejestrowanych modeli.
+    Creates the database tables from the registered models.
 
-    UWAGA: modele muszą być zaimportowane (zarejestrowane na Base.metadata)
-    PRZED wywołaniem tej funkcji - patrz `from core import models` w main.py.
+    NOTE: models must be imported (registered on Base.metadata)
+    BEFORE calling this function - see `from core import models` in main.py.
     """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

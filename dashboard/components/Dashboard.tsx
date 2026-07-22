@@ -316,12 +316,22 @@ export default function Dashboard({
                 żadnych zarejestrowanych aktywności.
               </div>
             ) : (
-              <RankingList
-                items={[...selectedUserGames].sort((a, b) => b.total_seconds - a.total_seconds)}
-                getLabel={(g) => g.activity_name}
-                getValue={(g) => g.total_seconds}
-                getColor={(g, i) => colorFor(g.activity_name, i)}
-              />
+              <>
+                <Donut
+                  items={[...selectedUserGames].sort((a, b) => b.total_seconds - a.total_seconds)}
+                  getLabel={(g) => g.activity_name}
+                  getValue={(g) => g.total_seconds}
+                  getColor={(g, i) => colorFor(g.activity_name, i)}
+                  centerLabel="łącznie"
+                />
+                <div className="games-list-title">Ranking gier</div>
+                <RankingList
+                  items={[...selectedUserGames].sort((a, b) => b.total_seconds - a.total_seconds)}
+                  getLabel={(g) => g.activity_name}
+                  getValue={(g) => g.total_seconds}
+                  getColor={(g, i) => colorFor(g.activity_name, i)}
+                />
+              </>
             )}
           </section>
         </main>

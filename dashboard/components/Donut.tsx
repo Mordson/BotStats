@@ -1,16 +1,29 @@
-import type { GameTimeOut } from "@/lib/api";
-import { colorFor, fmtHours, GRAY } from "@/lib/format";
+import { fmtHours, GRAY } from "@/lib/format";
 
-export default function GamesDonut({ games }: { games: GameTimeOut[] }) {
-  const totalAll = games.reduce((s, g) => s + g.total_seconds, 0);
-  const donutSlices = games.slice(0, 8);
-  const otherSeconds = games.slice(8).reduce((s, g) => s + g.total_seconds, 0);
+interface DonutProps<T> {
+  items: T[];
+  getLabel: (item: T) => string;
+  getValue: (item: T) => number;
+  getColor: (item: T, index: number) => string;
+  centerLabel: string;
+}
+
+export default function Donut<T>({
+  items,
+  getLabel,
+  getValue,
+  getColor,
+  centerLabel,
+}: DonutProps<T>) {
+  const totalAll = items.reduce((s, item) => s + getValue(item), 0);
+  const donutSlices = items.slice(0, 8);
+  const otherSeconds = items.slice(8).reduce((s, item) => s + getValue(item), 0);
 
   let acc = 0;
   const stops: string[] = [];
-  donutSlices.forEach((g, i) => {
-    const pct = totalAll ? (g.total_seconds / totalAll) * 100 : 0;
-    stops.push(`${colorFor(g.activity_name, i)} ${acc}% ${acc + pct}%`);
+  donutSlices.forEach((item, i) => {
+    const pct = totalAll ? (getValue(item) / totalAll) * 100 : 0;
+    stops.push(`${getColor(item, i)} ${acc}% ${acc + pct}%`);
     acc += pct;
   });
   if (otherSeconds > 0) {
@@ -28,18 +41,19 @@ export default function GamesDonut({ games }: { games: GameTimeOut[] }) {
         <div className="donut" style={{ background }}>
           <div className="donut-center">
             <div className="val">{fmtHours(totalAll)}</div>
-            <div className="lbl">łącznie</div>
+            <div className="lbl">{centerLabel}</div>
           </div>
         </div>
       </div>
       <div className="legend">
-        {donutSlices.map((g, i) => {
-          const pct = totalAll ? Math.round((g.total_seconds / totalAll) * 1000) / 10 : 0;
+        {donutSlices.map((item, i) => {
+          const value = getValue(item);
+          const pct = totalAll ? Math.round((value / totalAll) * 1000) / 10 : 0;
           return (
-            <div className="legend-row" key={g.activity_name}>
-              <div className="dot" style={{ background: colorFor(g.activity_name, i) }} />
-              <div className="name">{g.activity_name}</div>
-              <div className="hrs mono">{fmtHours(g.total_seconds)}</div>
+            <div className="legend-row" key={getLabel(item)}>
+              <div className="dot" style={{ background: getColor(item, i) }} />
+              <div className="name">{getLabel(item)}</div>
+              <div className="hrs mono">{fmtHours(value)}</div>
               <div className="pct mono">{pct}%</div>
             </div>
           );

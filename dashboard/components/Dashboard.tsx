@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import RankingList from "./RankingList";
-import GamesDonut from "./GamesDonut";
+import Donut from "./Donut";
 import { TIME_RANGES, colorFor, fmtHours, sinceIso } from "@/lib/format";
 import type { GameTimeOut, UserGameTimeOut, UserOut, VoiceTimeOut } from "@/lib/api";
 
@@ -221,13 +221,23 @@ export default function Dashboard({
                 Brak danych — bot jeszcze nie zarejestrował żadnych sesji głosowych.
               </div>
             ) : (
-              <RankingList
-                items={voiceData}
-                getLabel={(u) => u.display_name}
-                getValue={(u) => u.total_seconds}
-                getColor={(u) => colorFor(u.display_name)}
-                useAvatar
-              />
+              <>
+                <Donut
+                  items={voiceData}
+                  getLabel={(u) => u.display_name}
+                  getValue={(u) => u.total_seconds}
+                  getColor={(u, i) => colorFor(u.display_name, i)}
+                  centerLabel="łącznie"
+                />
+                <div className="games-list-title">Ranking użytkowników</div>
+                <RankingList
+                  items={voiceData}
+                  getLabel={(u) => u.display_name}
+                  getValue={(u) => u.total_seconds}
+                  getColor={(u) => colorFor(u.display_name)}
+                  useAvatar
+                />
+              </>
             )}
           </section>
 
@@ -256,7 +266,13 @@ export default function Dashboard({
               </div>
             ) : (
               <>
-                <GamesDonut games={gamesData} />
+                <Donut
+                  items={gamesData}
+                  getLabel={(g) => g.activity_name}
+                  getValue={(g) => g.total_seconds}
+                  getColor={(g, i) => colorFor(g.activity_name, i)}
+                  centerLabel="łącznie"
+                />
                 <div className="games-list-title">Ranking gier</div>
                 <RankingList
                   items={shownGames}
@@ -300,12 +316,22 @@ export default function Dashboard({
                 żadnych zarejestrowanych aktywności.
               </div>
             ) : (
-              <RankingList
-                items={[...selectedUserGames].sort((a, b) => b.total_seconds - a.total_seconds)}
-                getLabel={(g) => g.activity_name}
-                getValue={(g) => g.total_seconds}
-                getColor={(g, i) => colorFor(g.activity_name, i)}
-              />
+              <>
+                <Donut
+                  items={[...selectedUserGames].sort((a, b) => b.total_seconds - a.total_seconds)}
+                  getLabel={(g) => g.activity_name}
+                  getValue={(g) => g.total_seconds}
+                  getColor={(g, i) => colorFor(g.activity_name, i)}
+                  centerLabel="łącznie"
+                />
+                <div className="games-list-title">Ranking gier</div>
+                <RankingList
+                  items={[...selectedUserGames].sort((a, b) => b.total_seconds - a.total_seconds)}
+                  getLabel={(g) => g.activity_name}
+                  getValue={(g) => g.total_seconds}
+                  getColor={(g, i) => colorFor(g.activity_name, i)}
+                />
+              </>
             )}
           </section>
         </main>

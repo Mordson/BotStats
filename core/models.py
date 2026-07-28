@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, JSON, String
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,7 +30,9 @@ class User(Base):
     )
     # The user's current role IDs on the guild (refreshed on every member sync),
     # used to filter visibility in the dashboard's game sections.
-    role_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), default=list, server_default="{}")
+    role_ids: Mapped[list[int]] = mapped_column(
+        ARRAY(BigInteger).with_variant(JSON(), "sqlite"), default=list, server_default="{}"
+    )
 
     voice_sessions: Mapped[list["VoiceSession"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

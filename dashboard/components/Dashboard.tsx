@@ -212,13 +212,13 @@ export default function Dashboard({
         <main>
           <section className="panel" hidden={activeTab !== "voice"}>
             <div className="panel-head">
-              <h2>Ranking — czas na kanałach głosowych</h2>
+              <h2>Ranking - czas na kanałach głosowych</h2>
             </div>
             {rangeLoading ? (
               <div className="loading-state">Ładowanie…</div>
             ) : voiceData.length === 0 ? (
               <div className="empty-state">
-                Brak danych — bot jeszcze nie zarejestrował żadnych sesji głosowych.
+                Brak danych - bot jeszcze nie zarejestrował żadnych sesji głosowych.
               </div>
             ) : (
               <>
@@ -234,7 +234,7 @@ export default function Dashboard({
                   items={voiceData}
                   getLabel={(u) => u.display_name}
                   getValue={(u) => u.total_seconds}
-                  getColor={(u) => colorFor(u.display_name)}
+                  getColor={(u, i) => colorFor(u.display_name, i)}
                   useAvatar
                 />
               </>
@@ -243,7 +243,7 @@ export default function Dashboard({
 
           <section className="panel" hidden={activeTab !== "games"}>
             <div className="panel-head">
-              <h2>Ranking gier — łączny czas wszystkich użytkowników</h2>
+              <h2>Ranking gier - łączny czas wszystkich użytkowników</h2>
               <div>
                 <span className="field-label">Liczba gier</span>
                 <select
@@ -262,7 +262,7 @@ export default function Dashboard({
               <div className="loading-state">Ładowanie…</div>
             ) : gamesData.length === 0 ? (
               <div className="empty-state">
-                Brak danych — bot jeszcze nie zarejestrował żadnych aktywności.
+                Brak danych - bot jeszcze nie zarejestrował żadnych aktywności.
               </div>
             ) : (
               <>
@@ -337,7 +337,7 @@ export default function Dashboard({
         </main>
       </div>
 
-      <footer>Dashboard aktywności serwera Discord</footer>
+      <footer>Dashboard aktywności serwera "Piwo i Rzygowiny"</footer>
     </>
   );
 }

@@ -40,6 +40,8 @@ export default function Dashboard({
   const [rangeLoading, setRangeLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
 
+  const userGamesCacheKey = (userId: string, hours: number) => `${userId}:${hours}`;
+
   async function loadRangeData(hours: number) {
     setRangeLoading(true);
     const since = sinceIso(hours);
@@ -75,13 +77,16 @@ export default function Dashboard({
     }
   }
 
-  async function loadUserGames(userId: string) {
+  async function loadUserGames(userId: string, hours: number) {
     setUserGamesLoading(true);
     try {
-      const resp = await fetch(`/api/users/${userId}/games`);
+      const since = sinceIso(hours);
+      const resp = await fetch(
+        `/api/users/${userId}/games?since=${encodeURIComponent(since)}`,
+      );
       if (!resp.ok) throw new Error("http");
       const data: UserGameTimeOut[] = await resp.json();
-      setUserGamesCache((prev) => ({ ...prev, [userId]: data }));
+      setUserGamesCache((prev) => ({ ...prev, [userGamesCacheKey(userId, hours)]: data }));
       setError(null);
     } catch {
       setError("Nie udało się pobrać danych użytkownika.");
@@ -93,34 +98,38 @@ export default function Dashboard({
   function handleTimeRangeChange(hours: number) {
     setSinceHours(hours);
     void loadRangeData(hours);
+    if (activeTab === "user" && selectedUserId) void loadUserGames(selectedUserId, hours);
   }
 
   function handleTabChange(tab: Tab) {
     setActiveTab(tab);
-    if (tab === "user" && selectedUserId && !userGamesCache[selectedUserId]) {
-      void loadUserGames(selectedUserId);
+    if (tab === "user" && selectedUserId && !userGamesCache[userGamesCacheKey(selectedUserId, sinceHours)]) {
+      void loadUserGames(selectedUserId, sinceHours);
     }
   }
 
   function handleUserChange(userId: string) {
     setSelectedUserId(userId);
-    if (!userGamesCache[userId]) void loadUserGames(userId);
+    if (!userGamesCache[userGamesCacheKey(userId, sinceHours)]) void loadUserGames(userId, sinceHours);
   }
 
   function handleRefresh() {
     setUserGamesCache({});
     void loadRangeData(sinceHours);
     void loadUsers();
-    if (activeTab === "user" && selectedUserId) void loadUserGames(selectedUserId);
+    if (activeTab === "user" && selectedUserId) void loadUserGames(selectedUserId, sinceHours);
   }
 
   const voiceTotal = voiceData.reduce((sum, u) => sum + u.total_seconds, 0);
   const activePlayers = voiceData.filter((u) => u.total_seconds > 0).length;
   const topGame = gamesData[0]?.activity_name ?? "–";
   const trackedGames = gamesData.length;
+  const periodLabel = TIME_RANGES.find((r) => r.hours === sinceHours)?.label ?? "";
 
   const shownGames = gamesData.slice(0, gamesLimit);
-  const selectedUserGames = selectedUserId ? userGamesCache[selectedUserId] : undefined;
+  const selectedUserGames = selectedUserId
+    ? userGamesCache[userGamesCacheKey(selectedUserId, sinceHours)]
+    : undefined;
   const selectedUser = users.find((u) => u.id === selectedUserId);
 
   return (
@@ -228,6 +237,7 @@ export default function Dashboard({
                   getValue={(u) => u.total_seconds}
                   getColor={(u, i) => colorFor(u.display_name, i)}
                   centerLabel="łącznie"
+                  periodLabel={periodLabel}
                 />
                 <div className="games-list-title">Ranking użytkowników</div>
                 <RankingList
@@ -272,6 +282,7 @@ export default function Dashboard({
                   getValue={(g) => g.total_seconds}
                   getColor={(g, i) => colorFor(g.activity_name, i)}
                   centerLabel="łącznie"
+                  periodLabel={periodLabel}
                 />
                 <div className="games-list-title">Ranking gier</div>
                 <RankingList
@@ -323,6 +334,7 @@ export default function Dashboard({
                   getValue={(g) => g.total_seconds}
                   getColor={(g, i) => colorFor(g.activity_name, i)}
                   centerLabel="łącznie"
+                  periodLabel={periodLabel}
                 />
                 <div className="games-list-title">Ranking gier</div>
                 <RankingList

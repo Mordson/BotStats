@@ -266,14 +266,35 @@ class ActivitySessionRepository:
                 rows.append((name, seconds))
         return _aggregate_by_normalized_name(rows, limit)
 
-    async def total_game_time_by_user(self, user_id: int) -> list[tuple[str, int]]:
-        """The given user's play time, grouped by game name."""
+    async def total_game_time_by_user(
+        self, user_id: int, since: datetime | None = None
+    ) -> list[tuple[str, int]]:
+        """The given user's play time, grouped by game name.
+
+        Counts only the part of each session that overlaps [since, now] - a session
+        that started before `since` but ended (or is still open) after it is
+        partially counted instead of being dropped entirely.
+        """
+        now = datetime.now(timezone.utc)
+        since_utc = _as_aware_utc(since) if since is not None else None
+        conditions = [
+            ActivitySession.user_id == user_id,
+            ActivitySession.activity_type == "playing",
+        ]
+        if since_utc is not None:
+            conditions.append(or_(ActivitySession.end_time.is_(None), ActivitySession.end_time >= since_utc))
         result = await self.session.execute(
-            select(ActivitySession.activity_name, ActivitySession.duration_seconds)
-            .where(
-                ActivitySession.user_id == user_id,
-                ActivitySession.activity_type == "playing",
-                ActivitySession.duration_seconds.is_not(None),
-            )
+            select(
+                ActivitySession.activity_name, ActivitySession.start_time, ActivitySession.end_time
+            ).where(*conditions)
         )
-        return _aggregate_by_normalized_name(result.all())
+        rows: list[tuple[str, int]] = []
+        for name, start_time, end_time in result.all():
+            window_start = _as_aware_utc(start_time)
+            if since_utc is not None and since_utc > window_start:
+                window_start = since_utc
+            window_end = _as_aware_utc(end_time) if end_time is not None else now
+            seconds = int((window_end - window_start).total_seconds())
+            if seconds > 0:
+                rows.append((name, seconds))
+        return _aggregate_by_normalized_name(rows)

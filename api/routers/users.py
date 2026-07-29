@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,9 +33,11 @@ async def get_user(user_id: int, session: AsyncSession = Depends(get_db_session)
 
 @router.get("/{user_id}/games", response_model=list[UserGameTimeOut])
 async def user_game_time(
-    user_id: int, session: AsyncSession = Depends(get_db_session)
+    user_id: int,
+    since: datetime | None = None,
+    session: AsyncSession = Depends(get_db_session),
 ) -> list[UserGameTimeOut]:
-    """The given user's play time per game (seconds)."""
+    """The given user's play time per game (seconds), optionally restricted to a time window."""
     repo = ActivitySessionRepository(session)
-    rows = await repo.total_game_time_by_user(user_id)
+    rows = await repo.total_game_time_by_user(user_id, since=since)
     return [UserGameTimeOut(activity_name=name, total_seconds=seconds) for name, seconds in rows]

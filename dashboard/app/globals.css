@@ -389,6 +389,11 @@ select option {
   letter-spacing: 0.06em;
   margin-top: 2px;
 }
+.donut-period {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}
 
 .legend {
   display: flex;

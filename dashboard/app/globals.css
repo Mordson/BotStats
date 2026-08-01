@@ -371,6 +371,7 @@ select option {
 .donut-center {
   position: absolute;
   inset: 26px;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -388,6 +389,11 @@ select option {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-top: 2px;
+}
+.donut-period {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
 }
 
 .legend {

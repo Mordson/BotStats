@@ -1,13 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { apiFetch, ApiError, UserGameTimeOut } from "@/lib/api";
 
 export async function GET(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const since = request.nextUrl.searchParams.get("since") ?? undefined;
   try {
-    const data = await apiFetch<UserGameTimeOut[]>(`/users/${id}/games`);
+    const data = await apiFetch<UserGameTimeOut[]>(`/users/${id}/games`, { since });
     return NextResponse.json(data);
   } catch (err) {
     const message = err instanceof ApiError ? err.message : "Nieznany błąd API";

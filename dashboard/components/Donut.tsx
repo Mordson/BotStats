@@ -6,6 +6,7 @@ interface DonutProps<T> {
   getValue: (item: T) => number;
   getColor: (item: T, index: number) => string;
   centerLabel: string;
+  periodLabel?: string;
 }
 
 export default function Donut<T>({
@@ -14,6 +15,7 @@ export default function Donut<T>({
   getValue,
   getColor,
   centerLabel,
+  periodLabel,
 }: DonutProps<T>) {
   const totalAll = items.reduce((s, item) => s + getValue(item), 0);
   const donutSlices = items.slice(0, 8);
@@ -44,6 +46,7 @@ export default function Donut<T>({
             <div className="lbl">{centerLabel}</div>
           </div>
         </div>
+        {periodLabel && <div className="donut-period">{periodLabel}</div>}
       </div>
       <div className="legend">
         {donutSlices.map((item, i) => {

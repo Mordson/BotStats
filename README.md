@@ -24,15 +24,37 @@ discord-activity-bot/
 │       ├── voice_tracker.py    # on_voice_state_update → voice time
 │       ├── presence_tracker.py # on_presence_update → games/activities
 │       └── member_tracker.py   # on_member_update → re-syncs role_ids on role changes
-└── api/                   # REST API for the dashboard (FastAPI)
-    ├── main.py
-    ├── schemas.py          # DTOs (Pydantic) — API contract
-    └── routers/
-        ├── users.py
-        └── stats.py
+├── api/                   # REST API for the dashboard (FastAPI)
+│   ├── main.py
+│   ├── schemas.py          # DTOs (Pydantic) — API contract
+│   └── routers/
+│       ├── users.py
+│       └── stats.py
+└── dashboard/             # Next.js dashboard (App Router, server-rendered)
+    ├── app/
+    │   ├── page.tsx            # server component — initial data fetch
+    │   └── api/                # route handlers proxying to the FastAPI backend
+    ├── components/
+    │   ├── Dashboard.tsx        # tabs, time-range picker, client-side refetching
+    │   ├── Donut.tsx             # pie chart (voice time / top games / per-user games)
+    │   └── RankingList.tsx       # leaderboard list paired with each Donut
+    └── lib/
+        ├── api.ts               # server-only fetch wrapper (talks to the FastAPI backend)
+        └── format.ts             # time-range options, hour/minute formatting, color palette
 ```
 
-A Next.js dashboard (`dashboard/`) consumes the API — see "Running with Docker Compose" below.
+### Dashboard
+
+A Next.js (App Router) app with three tabs, each showing a pie chart (`Donut`) paired with a ranked
+list:
+
+- **Czas głosowy** — voice-channel time leaderboard across all tracked users.
+- **Top gry** — game leaderboard by total playtime (configurable count via a dropdown).
+- **Użytkownik** — per-user breakdown of playtime by game.
+
+A time-range picker (24h / week / month / half-year / year) filters all three tabs via the API's
+`since` param (see "API endpoints" below). The dashboard talks to the API only server-side — see
+"Running with Docker Compose" for the request-flow details.
 
 ### Design patterns
 
@@ -91,6 +113,18 @@ uvicorn api.main:app --reload
 ```
 
 The API will be available at `http://localhost:8000`, Swagger docs at `http://localhost:8000/docs`.
+
+To run the dashboard against that local API, in a third terminal:
+
+```bash
+cd dashboard
+npm install
+API_INTERNAL_URL=http://localhost:8000 npm run dev
+```
+
+`API_INTERNAL_URL` defaults to `http://api:8000`, which only resolves inside the Docker network — set
+it explicitly to your local API URL when running the dashboard outside Docker. It's available at
+`http://localhost:3000`.
 
 ## Running with Docker Compose
 

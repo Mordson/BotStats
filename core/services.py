@@ -16,7 +16,13 @@ from datetime import datetime, timezone
 import discord
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.repositories import ActivitySessionRepository, UserRepository, VoiceSessionRepository, _normalize_activity_name
+from core.repositories import (
+    ActivitySessionRepository,
+    UserRepository,
+    VoiceActiveSessionRepository,
+    VoiceSessionRepository,
+    _normalize_activity_name,
+)
 
 
 class TrackingService:
@@ -24,6 +30,7 @@ class TrackingService:
         self.session = session
         self.users = UserRepository(session)
         self.voice = VoiceSessionRepository(session)
+        self.voice_active = VoiceActiveSessionRepository(session)
         self.activities = ActivitySessionRepository(session)
 
     async def ensure_user(self, member: discord.Member) -> None:
@@ -70,6 +77,24 @@ class TrackingService:
                 guild_id=member.guild.id,
                 channel_id=after.channel.id,
                 channel_name=after.channel.name,
+                start_time=now,
+            )
+
+        # Voice-active tracking: client-side mic/headphones only. Persists across
+        # channel switches - only a full connect/disconnect or a self_mute/self_deaf
+        # transition opens/closes a session; server-enforced mute/deaf (`mute`/`deaf`)
+        # are intentionally ignored.
+        was_active = before.channel is not None and not before.self_mute and not before.self_deaf
+        is_active = after.channel is not None and not after.self_mute and not after.self_deaf
+
+        if was_active and not is_active:
+            open_active_session = await self.voice_active.get_open_session(member.id)
+            if open_active_session is not None:
+                await self.voice_active.close_session(open_active_session, now)
+        elif is_active and not was_active:
+            await self.voice_active.start_session(
+                user_id=member.id,
+                guild_id=member.guild.id,
                 start_time=now,
             )
 
@@ -144,6 +169,7 @@ class TrackingService:
         """
         now = datetime.now(timezone.utc)
         await self.voice.close_all_open(now)
+        await self.voice_active.close_all_open(now)
         await self.activities.close_all_open(now)
         await self.session.commit()
 

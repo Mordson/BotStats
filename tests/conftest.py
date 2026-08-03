@@ -67,8 +67,16 @@ def make_voice_channel(id: int, name: str) -> SimpleNamespace:
     return SimpleNamespace(id=id, name=name)
 
 
-def make_voice_state(channel: SimpleNamespace | None = None) -> SimpleNamespace:
-    return SimpleNamespace(channel=channel)
+def make_voice_state(
+    channel: SimpleNamespace | None = None,
+    self_mute: bool = False,
+    self_deaf: bool = False,
+    mute: bool = False,
+    deaf: bool = False,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        channel=channel, self_mute=self_mute, self_deaf=self_deaf, mute=mute, deaf=deaf
+    )
 
 
 def make_activity(

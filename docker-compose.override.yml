@@ -1,0 +1,4 @@
+services:
+  dashboard:
+    ports:
+      - "8081:3000"

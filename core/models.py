@@ -2,9 +2,10 @@
 ORM models (SQLAlchemy 2.0, Mapped/mapped_column style).
 
 Tables:
-- users            - Discord users seen on the guild
-- voice_sessions   - sessions of presence in voice channels (for counting "time on server")
-- activity_sessions - activity sessions (e.g. "Playing Valorant", "Listening to Spotify")
+- users               - Discord users seen on the guild
+- voice_sessions      - sessions of presence in voice channels (for counting "time on server")
+- voice_active_sessions - sessions where mic + headphones were both enabled (self_mute/self_deaf off)
+- activity_sessions   - activity sessions (e.g. "Playing Valorant", "Listening to Spotify")
 """
 
 from __future__ import annotations
@@ -37,6 +38,9 @@ class User(Base):
     voice_sessions: Mapped[list["VoiceSession"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    voice_active_sessions: Mapped[list["VoiceActiveSession"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     activity_sessions: Mapped[list["ActivitySession"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -65,6 +69,37 @@ class VoiceSession(Base):
     def __repr__(self) -> str:
         return (
             f"<VoiceSession user_id={self.user_id} channel={self.channel_name!r} "
+            f"start={self.start_time} end={self.end_time}>"
+        )
+
+
+class VoiceActiveSession(Base):
+    """
+    A contiguous period during which the user was connected to a voice channel
+    with both microphone and headphones enabled (self_mute == False and
+    self_deaf == False on discord.VoiceState).
+
+    Only client-side self_mute/self_deaf are tracked - server-enforced mute/deafen
+    (moderator actions) are out of scope. Not tied to a channel_id: the session
+    persists across channel switches, since switching channels doesn't change
+    whether the mic/headphones are on.
+    """
+
+    __tablename__ = "voice_active_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger)
+
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    user: Mapped["User"] = relationship(back_populates="voice_active_sessions")
+
+    def __repr__(self) -> str:
+        return (
+            f"<VoiceActiveSession user_id={self.user_id} "
             f"start={self.start_time} end={self.end_time}>"
         )
 

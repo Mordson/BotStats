@@ -1,7 +1,7 @@
 import discord
 from sqlalchemy import select
 
-from core.models import ActivitySession, User, VoiceSession
+from core.models import ActivitySession, User, VoiceActiveSession, VoiceSession
 from core.services import TrackingService
 from tests.conftest import make_activity, make_member, make_role, make_voice_channel, make_voice_state
 
@@ -106,6 +106,219 @@ async def test_voice_same_channel_is_noop(tracking_service: TrackingService, db_
     )
 
     result = await db_session.execute(select(VoiceSession).where(VoiceSession.user_id == 1))
+    sessions = result.scalars().all()
+    assert len(sessions) == 1
+    assert sessions[0].end_time is None
+
+
+async def test_voice_join_while_active_opens_active_session(
+    tracking_service: TrackingService, db_session
+):
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel)
+    )
+
+    result = await db_session.execute(select(VoiceActiveSession).where(VoiceActiveSession.user_id == 1))
+    sessions = result.scalars().all()
+    assert len(sessions) == 1
+    assert sessions[0].end_time is None
+
+
+async def test_voice_join_while_muted_does_not_open_active_session(
+    tracking_service: TrackingService, db_session
+):
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel, self_mute=True)
+    )
+
+    result = await db_session.execute(select(VoiceActiveSession).where(VoiceActiveSession.user_id == 1))
+    assert result.scalars().all() == []
+
+
+async def test_voice_join_while_deafened_does_not_open_active_session(
+    tracking_service: TrackingService, db_session
+):
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel, self_deaf=True)
+    )
+
+    result = await db_session.execute(select(VoiceActiveSession).where(VoiceActiveSession.user_id == 1))
+    assert result.scalars().all() == []
+
+
+async def test_voice_mute_toggle_closes_active_session(tracking_service: TrackingService, db_session):
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel)
+    )
+    await tracking_service.handle_voice_state_update(
+        member,
+        make_voice_state(channel=channel),
+        make_voice_state(channel=channel, self_mute=True),
+    )
+
+    result = await db_session.execute(select(VoiceActiveSession).where(VoiceActiveSession.user_id == 1))
+    sessions = result.scalars().all()
+    assert len(sessions) == 1
+    assert sessions[0].end_time is not None
+    assert sessions[0].duration_seconds is not None
+
+    voice_result = await db_session.execute(select(VoiceSession).where(VoiceSession.user_id == 1))
+    assert voice_result.scalars().one().end_time is None
+
+
+async def test_voice_unmute_toggle_reopens_active_session(tracking_service: TrackingService, db_session):
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel, self_mute=True)
+    )
+    await tracking_service.handle_voice_state_update(
+        member,
+        make_voice_state(channel=channel, self_mute=True),
+        make_voice_state(channel=channel, self_mute=False),
+    )
+
+    result = await db_session.execute(select(VoiceActiveSession).where(VoiceActiveSession.user_id == 1))
+    sessions = result.scalars().all()
+    assert len(sessions) == 1
+    assert sessions[0].end_time is None
+
+
+async def test_voice_simultaneous_mute_and_deafen_change_closes_active_session(
+    tracking_service: TrackingService, db_session
+):
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel)
+    )
+    await tracking_service.handle_voice_state_update(
+        member,
+        make_voice_state(channel=channel),
+        make_voice_state(channel=channel, self_mute=True, self_deaf=True),
+    )
+
+    result = await db_session.execute(select(VoiceActiveSession).where(VoiceActiveSession.user_id == 1))
+    sessions = result.scalars().all()
+    assert len(sessions) == 1
+    assert sessions[0].end_time is not None
+
+
+async def test_voice_simultaneous_mute_and_deafen_toggle_reopens_active_session(
+    tracking_service: TrackingService, db_session
+):
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+
+    await tracking_service.handle_voice_state_update(
+        member,
+        make_voice_state(channel=None),
+        make_voice_state(channel=channel, self_mute=True, self_deaf=True),
+    )
+    await tracking_service.handle_voice_state_update(
+        member,
+        make_voice_state(channel=channel, self_mute=True, self_deaf=True),
+        make_voice_state(channel=channel, self_mute=False, self_deaf=False),
+    )
+
+    result = await db_session.execute(select(VoiceActiveSession).where(VoiceActiveSession.user_id == 1))
+    sessions = result.scalars().all()
+    assert len(sessions) == 1
+    assert sessions[0].end_time is None
+
+
+async def test_voice_leave_channel_while_active_closes_both_sessions(
+    tracking_service: TrackingService, db_session
+):
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel)
+    )
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=channel), make_voice_state(channel=None)
+    )
+
+    voice_result = await db_session.execute(select(VoiceSession).where(VoiceSession.user_id == 1))
+    active_result = await db_session.execute(select(VoiceActiveSession).where(VoiceActiveSession.user_id == 1))
+    assert voice_result.scalars().one().end_time is not None
+    active_session = active_result.scalars().one()
+    assert active_session.end_time is not None
+    assert active_session.duration_seconds is not None
+
+
+async def test_voice_leave_channel_while_muted_only_closes_voice_session(
+    tracking_service: TrackingService, db_session
+):
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel, self_mute=True)
+    )
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=channel, self_mute=True), make_voice_state(channel=None)
+    )
+
+    voice_result = await db_session.execute(select(VoiceSession).where(VoiceSession.user_id == 1))
+    active_result = await db_session.execute(select(VoiceActiveSession).where(VoiceActiveSession.user_id == 1))
+    assert voice_result.scalars().one().end_time is not None
+    assert active_result.scalars().all() == []
+
+
+async def test_voice_channel_switch_while_active_persists_active_session(
+    tracking_service: TrackingService, db_session
+):
+    member = make_member(id=1)
+    channel_a = make_voice_channel(id=100, name="General")
+    channel_b = make_voice_channel(id=200, name="Gaming")
+
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel_a)
+    )
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=channel_a), make_voice_state(channel=channel_b)
+    )
+
+    voice_result = await db_session.execute(select(VoiceSession).where(VoiceSession.user_id == 1))
+    active_result = await db_session.execute(select(VoiceActiveSession).where(VoiceActiveSession.user_id == 1))
+    assert len(voice_result.scalars().all()) == 2
+    active_sessions = active_result.scalars().all()
+    assert len(active_sessions) == 1
+    assert active_sessions[0].end_time is None
+
+
+async def test_voice_server_mute_and_deaf_do_not_affect_active_session(
+    tracking_service: TrackingService, db_session
+):
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel)
+    )
+    await tracking_service.handle_voice_state_update(
+        member,
+        make_voice_state(channel=channel),
+        make_voice_state(channel=channel, mute=True, deaf=True),
+    )
+
+    result = await db_session.execute(select(VoiceActiveSession).where(VoiceActiveSession.user_id == 1))
     sessions = result.scalars().all()
     assert len(sessions) == 1
     assert sessions[0].end_time is None
@@ -230,6 +443,8 @@ async def test_cleanup_open_sessions_closes_everything(tracking_service: Trackin
     await tracking_service.cleanup_open_sessions()
 
     voice_result = await db_session.execute(select(VoiceSession))
+    voice_active_result = await db_session.execute(select(VoiceActiveSession))
     activity_result = await db_session.execute(select(ActivitySession))
     assert all(s.end_time is not None for s in voice_result.scalars().all())
+    assert all(s.end_time is not None for s in voice_active_result.scalars().all())
     assert all(s.end_time is not None for s in activity_result.scalars().all())

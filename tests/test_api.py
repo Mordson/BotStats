@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from core.repositories import ActivitySessionRepository, UserRepository, VoiceSessionRepository
+from core.repositories import ActivitySessionRepository, UserRepository, VoiceActiveSessionRepository
 
 
 async def _create_user(db_session, user_id: int, display_name: str) -> None:
@@ -60,16 +60,12 @@ async def test_user_games_returns_aggregated_time(api_client, db_session):
 async def test_voice_time_leaderboard_sorted_descending(api_client, db_session):
     await _create_user(db_session, user_id=1, display_name="Alice")
     await _create_user(db_session, user_id=2, display_name="Bob")
-    voice = VoiceSessionRepository(db_session)
+    voice = VoiceActiveSessionRepository(db_session)
     now = datetime.now(timezone.utc)
 
-    short_session = await voice.start_session(
-        user_id=1, guild_id=1, channel_id=100, channel_name="General", start_time=now
-    )
+    short_session = await voice.start_session(user_id=1, guild_id=1, start_time=now)
     await voice.close_session(short_session, now + timedelta(seconds=10))
-    long_session = await voice.start_session(
-        user_id=2, guild_id=1, channel_id=100, channel_name="General", start_time=now
-    )
+    long_session = await voice.start_session(user_id=2, guild_id=1, start_time=now)
     await voice.close_session(long_session, now + timedelta(seconds=100))
     await db_session.commit()
 
@@ -83,11 +79,9 @@ async def test_voice_time_leaderboard_sorted_descending(api_client, db_session):
 
 async def test_voice_time_leaderboard_since_filters_older_sessions(api_client, db_session):
     await _create_user(db_session, user_id=1, display_name="Alice")
-    voice = VoiceSessionRepository(db_session)
+    voice = VoiceActiveSessionRepository(db_session)
     now = datetime.now(timezone.utc)
-    old_session = await voice.start_session(
-        user_id=1, guild_id=1, channel_id=100, channel_name="General", start_time=now - timedelta(days=2)
-    )
+    old_session = await voice.start_session(user_id=1, guild_id=1, start_time=now - timedelta(days=2))
     await voice.close_session(old_session, now - timedelta(days=2) + timedelta(seconds=10))
     await db_session.commit()
 

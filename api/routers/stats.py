@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps import get_db_session
 from api.schemas import GameTimeOut, VoiceTimeOut
 from config import settings
-from core.repositories import ActivitySessionRepository, UserRepository, VoiceSessionRepository
+from core.repositories import ActivitySessionRepository, UserRepository, VoiceActiveSessionRepository
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
@@ -20,8 +20,8 @@ async def voice_time_leaderboard(
     since: datetime | None = None,
     session: AsyncSession = Depends(get_db_session),
 ) -> list[VoiceTimeOut]:
-    """User leaderboard by total time spent in voice channels."""
-    voice_repo = VoiceSessionRepository(session)
+    """User leaderboard by total voice-active time (mic + headphones on, not muted/deafened)."""
+    voice_repo = VoiceActiveSessionRepository(session)
     user_repo = UserRepository(session)
 
     rows = await voice_repo.total_time_by_user(since=since)

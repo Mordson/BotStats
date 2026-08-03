@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.models import ActivitySession, User, VoiceSession
+from core.models import ActivitySession, User, VoiceActiveSession, VoiceSession
 
 
 def _normalize_activity_name(name: str) -> str:
@@ -162,6 +162,78 @@ class VoiceSessionRepository:
             conditions.append(or_(VoiceSession.end_time.is_(None), VoiceSession.end_time >= since_utc))
         result = await self.session.execute(
             select(VoiceSession.user_id, VoiceSession.start_time, VoiceSession.end_time).where(*conditions)
+        )
+        totals: dict[int, int] = {}
+        for user_id, start_time, end_time in result.all():
+            window_start = _as_aware_utc(start_time)
+            if since_utc is not None and since_utc > window_start:
+                window_start = since_utc
+            window_end = _as_aware_utc(end_time) if end_time is not None else now
+            seconds = int((window_end - window_start).total_seconds())
+            if seconds > 0:
+                totals[user_id] = totals.get(user_id, 0) + seconds
+        return [(user_id, total) for user_id, total in totals.items()]
+
+
+class VoiceActiveSessionRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def start_session(
+        self, user_id: int, guild_id: int, start_time: datetime
+    ) -> VoiceActiveSession:
+        session_obj = VoiceActiveSession(user_id=user_id, guild_id=guild_id, start_time=start_time)
+        self.session.add(session_obj)
+        await self.session.flush()
+        return session_obj
+
+    async def get_open_session(self, user_id: int) -> VoiceActiveSession | None:
+        """Finds the user's currently open (unfinished) active-voice session."""
+        result = await self.session.execute(
+            select(VoiceActiveSession)
+            .where(VoiceActiveSession.user_id == user_id, VoiceActiveSession.end_time.is_(None))
+            .order_by(VoiceActiveSession.start_time.desc())
+        )
+        return result.scalars().first()
+
+    async def close_session(
+        self, session_obj: VoiceActiveSession, end_time: datetime
+    ) -> VoiceActiveSession:
+        session_obj.end_time = end_time
+        session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
+        await self.session.flush()
+        return session_obj
+
+    async def close_all_open(self, end_time: datetime) -> None:
+        """Closes all 'orphaned' active-voice sessions (e.g. after a bot restart)."""
+        result = await self.session.execute(
+            select(VoiceActiveSession).where(VoiceActiveSession.end_time.is_(None))
+        )
+        for session_obj in result.scalars().all():
+            session_obj.end_time = end_time
+            session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
+        await self.session.flush()
+
+    async def total_time_by_user(self, since: datetime | None = None) -> list[tuple[int, int]]:
+        """
+        Total voice-active time (seconds), grouped by user - mic + headphones both on.
+
+        Counts only the part of each session that overlaps [since, now] - a session
+        that started before `since` but ended (or is still open) after it is
+        partially counted instead of being dropped entirely, and currently open
+        sessions count their in-progress duration up to now.
+        """
+        now = datetime.now(timezone.utc)
+        since_utc = _as_aware_utc(since) if since is not None else None
+        conditions = []
+        if since_utc is not None:
+            conditions.append(
+                or_(VoiceActiveSession.end_time.is_(None), VoiceActiveSession.end_time >= since_utc)
+            )
+        result = await self.session.execute(
+            select(
+                VoiceActiveSession.user_id, VoiceActiveSession.start_time, VoiceActiveSession.end_time
+            ).where(*conditions)
         )
         totals: dict[int, int] = {}
         for user_id, start_time, end_time in result.all():

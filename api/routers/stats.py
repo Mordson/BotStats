@@ -10,7 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps import get_db_session
 from api.schemas import GameTimeOut, VoiceTimeOut
 from config import settings
-from core.repositories import ActivitySessionRepository, UserRepository, VoiceActiveSessionRepository
+from core.repositories import (
+    ActivitySessionRepository,
+    UserRepository,
+    VoiceActiveSessionRepository,
+    VoiceSessionRepository,
+    _as_aware_utc,
+)
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
@@ -20,11 +26,36 @@ async def voice_time_leaderboard(
     since: datetime | None = None,
     session: AsyncSession = Depends(get_db_session),
 ) -> list[VoiceTimeOut]:
-    """User leaderboard by total voice-active time (mic + headphones on, not muted/deafened)."""
-    voice_repo = VoiceActiveSessionRepository(session)
+    """
+    User leaderboard by total voice time.
+
+    Blends two sources at the point where voice-active tracking began (the
+    earliest ever voice_active_sessions row): before that cutoff, no mute/deafen
+    data exists, so plain channel-connection time is used (unchanged historical
+    behavior); from the cutoff onward, only voice-active time (mic + headphones
+    on, not muted/deafened) is counted. If no active-tracking data exists at all
+    yet, falls back entirely to plain connection time.
+    """
+    voice_repo = VoiceSessionRepository(session)
+    voice_active_repo = VoiceActiveSessionRepository(session)
     user_repo = UserRepository(session)
 
-    rows = await voice_repo.total_time_by_user(since=since)
+    cutoff = await voice_active_repo.get_earliest_start_time()
+
+    totals: dict[int, int] = {}
+    if cutoff is None:
+        rows = await voice_repo.total_time_by_user(since=since)
+    else:
+        since_utc = _as_aware_utc(since) if since is not None else None
+        cutoff_utc = _as_aware_utc(cutoff)
+        legacy_rows = await voice_repo.total_time_by_user(since=since_utc, until=cutoff_utc)
+        active_since = max(since_utc, cutoff_utc) if since_utc is not None else cutoff_utc
+        active_rows = await voice_active_repo.total_time_by_user(since=active_since)
+        rows = legacy_rows + active_rows
+
+    for user_id, seconds in rows:
+        totals[user_id] = totals.get(user_id, 0) + seconds
+
     users_by_id = {user.id: user for user in await user_repo.get_all()}
 
     result = [
@@ -33,7 +64,7 @@ async def voice_time_leaderboard(
             display_name=users_by_id[user_id].display_name if user_id in users_by_id else str(user_id),
             total_seconds=seconds,
         )
-        for user_id, seconds in rows
+        for user_id, seconds in totals.items()
     ]
     return sorted(result, key=lambda item: item.total_seconds, reverse=True)
 

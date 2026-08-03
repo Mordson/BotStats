@@ -1,6 +1,11 @@
 from datetime import datetime, timedelta, timezone
 
-from core.repositories import ActivitySessionRepository, UserRepository, VoiceActiveSessionRepository
+from core.repositories import (
+    ActivitySessionRepository,
+    UserRepository,
+    VoiceActiveSessionRepository,
+    VoiceSessionRepository,
+)
 
 
 async def _create_user(db_session, user_id: int, display_name: str) -> None:
@@ -91,6 +96,55 @@ async def test_voice_time_leaderboard_since_filters_older_sessions(api_client, d
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+async def test_voice_time_leaderboard_falls_back_to_voice_sessions_when_no_active_data(
+    api_client, db_session
+):
+    await _create_user(db_session, user_id=1, display_name="Alice")
+    voice = VoiceSessionRepository(db_session)
+    now = datetime.now(timezone.utc)
+    session_obj = await voice.start_session(
+        user_id=1, guild_id=1, channel_id=100, channel_name="General", start_time=now
+    )
+    await voice.close_session(session_obj, now + timedelta(seconds=42))
+    await db_session.commit()
+
+    response = api_client.get("/stats/voice-time")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == [{"user_id": "1", "display_name": "Alice", "total_seconds": 42}]
+
+
+async def test_voice_time_leaderboard_blends_legacy_and_active_time(api_client, db_session):
+    await _create_user(db_session, user_id=1, display_name="Alice")
+    voice = VoiceSessionRepository(db_session)
+    voice_active = VoiceActiveSessionRepository(db_session)
+    now = datetime.now(timezone.utc)
+
+    # Legacy connection time, well before any active-tracking data exists.
+    legacy_session = await voice.start_session(
+        user_id=1,
+        guild_id=1,
+        channel_id=100,
+        channel_name="General",
+        start_time=now - timedelta(days=10),
+    )
+    await voice.close_session(legacy_session, now - timedelta(days=10) + timedelta(seconds=50))
+
+    # Active-tracking data starts more recently - this becomes the "cutoff".
+    active_session = await voice_active.start_session(
+        user_id=1, guild_id=1, start_time=now - timedelta(seconds=30)
+    )
+    await voice_active.close_session(active_session, now)
+    await db_session.commit()
+
+    response = api_client.get("/stats/voice-time")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == [{"user_id": "1", "display_name": "Alice", "total_seconds": 80}]
 
 
 async def test_top_games_respects_limit(api_client, db_session):

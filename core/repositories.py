@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import ActivitySession, User, VoiceActiveSession, VoiceSession
@@ -146,18 +146,24 @@ class VoiceSessionRepository:
         await self.session.flush()
 
 
-    async def total_time_by_user(self, since: datetime | None = None) -> list[tuple[int, int]]:
+    async def total_time_by_user(
+        self, since: datetime | None = None, until: datetime | None = None
+    ) -> list[tuple[int, int]]:
         """
         Total time (in seconds) spent in voice channels, grouped by user.
 
-        Counts only the part of each session that overlaps [since, now] - a session
-        that started before `since` but ended (or is still open) after it is
-        partially counted instead of being dropped entirely, and currently open
-        sessions count their in-progress duration up to now.
+        Counts only the part of each session that overlaps [since, until] (`until`
+        defaults to now) - a session that started before `since` but ended (or is
+        still open) after it is partially counted instead of being dropped
+        entirely, and currently open sessions count their in-progress duration up
+        to `until`.
         """
         now = datetime.now(timezone.utc)
         since_utc = _as_aware_utc(since) if since is not None else None
+        until_utc = _as_aware_utc(until) if until is not None else None
         conditions = []
+        if until_utc is not None:
+            conditions.append(VoiceSession.start_time < until_utc)
         if since_utc is not None:
             conditions.append(or_(VoiceSession.end_time.is_(None), VoiceSession.end_time >= since_utc))
         result = await self.session.execute(
@@ -169,6 +175,8 @@ class VoiceSessionRepository:
             if since_utc is not None and since_utc > window_start:
                 window_start = since_utc
             window_end = _as_aware_utc(end_time) if end_time is not None else now
+            if until_utc is not None and window_end > until_utc:
+                window_end = until_utc
             seconds = int((window_end - window_start).total_seconds())
             if seconds > 0:
                 totals[user_id] = totals.get(user_id, 0) + seconds
@@ -213,6 +221,16 @@ class VoiceActiveSessionRepository:
             session_obj.end_time = end_time
             session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
         await self.session.flush()
+
+    async def get_earliest_start_time(self) -> datetime | None:
+        """
+        Returns the start_time of the earliest-ever active-voice session (across all users).
+
+        Used to find when active-voice tracking began, so time predating it can fall
+        back to plain voice-session (connection) time instead of showing as zero.
+        """
+        result = await self.session.execute(select(func.min(VoiceActiveSession.start_time)))
+        return result.scalar_one_or_none()
 
     async def total_time_by_user(self, since: datetime | None = None) -> list[tuple[int, int]]:
         """

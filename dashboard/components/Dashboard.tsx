@@ -149,7 +149,7 @@ export default function Dashboard({
             <div className="logo">◆</div>
             <div className="brand-text">
               <h1>Discord Activity Dashboard</h1>
-              <p>Statystyki aktywności serwera</p>
+              <p>Statystyki aktywności serwera "Piwo i Rzygowiny"</p>
             </div>
           </div>
           <div className="topbar-controls">

@@ -131,6 +131,8 @@ export default function Dashboard({
     ? userGamesCache[userGamesCacheKey(selectedUserId, sinceHours)]
     : undefined;
   const selectedUser = users.find((u) => u.id === selectedUserId);
+  const selectedUserVoiceSeconds =
+    voiceData.find((v) => v.user_id === selectedUserId)?.total_seconds ?? 0;
 
   return (
     <>
@@ -328,6 +330,10 @@ export default function Dashboard({
               </div>
             ) : (
               <>
+                <div className="user-voice-stat">
+                  <span className="user-voice-stat-label">🔊 Czas na kanałach głosowych</span>
+                  <span className="user-voice-stat-value">{fmtHours(selectedUserVoiceSeconds)}</span>
+                </div>
                 <Donut
                   items={[...selectedUserGames].sort((a, b) => b.total_seconds - a.total_seconds)}
                   getLabel={(g) => g.activity_name}

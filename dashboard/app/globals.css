@@ -464,6 +464,10 @@ select option {
   font-family: var(--font-mono), monospace;
 }
 
+.user-ranking-shift {
+  margin-top: 28px;
+}
+
 footer {
   max-width: 1180px;
   margin: 30px auto 0;

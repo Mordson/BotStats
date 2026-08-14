@@ -324,10 +324,23 @@ export default function Dashboard({
             ) : userGamesLoading || selectedUserGames === undefined ? (
               <div className="loading-state">Ładowanie…</div>
             ) : selectedUserGames.length === 0 ? (
-              <div className="empty-state">
-                {selectedUser ? selectedUser.display_name : "Użytkownik"} nie ma jeszcze
-                żadnych zarejestrowanych aktywności.
-              </div>
+              selectedUserVoiceSeconds > 0 ? (
+                <>
+                  <div className="user-voice-stat">
+                    <span className="user-voice-stat-label">🔊 Czas na kanałach głosowych</span>
+                    <span className="user-voice-stat-value">{fmtHours(selectedUserVoiceSeconds)}</span>
+                  </div>
+                  <div className="empty-state">
+                    {selectedUser ? selectedUser.display_name : "Użytkownik"} był aktywny na
+                    kanałach głosowych, ale nie ma jeszcze żadnych zarejestrowanych gier.
+                  </div>
+                </>
+              ) : (
+                <div className="empty-state">
+                  {selectedUser ? selectedUser.display_name : "Użytkownik"} nie ma jeszcze
+                  żadnych zarejestrowanych aktywności.
+                </div>
+              )
             ) : (
               <>
                 <div className="user-voice-stat">

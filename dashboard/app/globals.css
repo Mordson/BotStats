@@ -438,6 +438,32 @@ select option {
   margin: 24px 0 12px;
 }
 
+.user-voice-stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-left: 3px solid var(--cyan);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+.user-voice-stat-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+.user-voice-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--cyan);
+  font-family: var(--font-mono), monospace;
+}
+
 footer {
   max-width: 1180px;
   margin: 30px auto 0;

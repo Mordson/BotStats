@@ -131,6 +131,8 @@ export default function Dashboard({
     ? userGamesCache[userGamesCacheKey(selectedUserId, sinceHours)]
     : undefined;
   const selectedUser = users.find((u) => u.id === selectedUserId);
+  const selectedUserVoiceSeconds =
+    voiceData.find((v) => v.user_id === selectedUserId)?.total_seconds ?? 0;
 
   return (
     <>
@@ -322,12 +324,29 @@ export default function Dashboard({
             ) : userGamesLoading || selectedUserGames === undefined ? (
               <div className="loading-state">Ładowanie…</div>
             ) : selectedUserGames.length === 0 ? (
-              <div className="empty-state">
-                {selectedUser ? selectedUser.display_name : "Użytkownik"} nie ma jeszcze
-                żadnych zarejestrowanych aktywności.
-              </div>
+              selectedUserVoiceSeconds > 0 ? (
+                <>
+                  <div className="user-voice-stat">
+                    <span className="user-voice-stat-label">🔊 Czas na kanałach głosowych</span>
+                    <span className="user-voice-stat-value">{fmtHours(selectedUserVoiceSeconds)}</span>
+                  </div>
+                  <div className="empty-state">
+                    {selectedUser ? selectedUser.display_name : "Użytkownik"} był aktywny na
+                    kanałach głosowych, ale nie ma jeszcze żadnych zarejestrowanych gier.
+                  </div>
+                </>
+              ) : (
+                <div className="empty-state">
+                  {selectedUser ? selectedUser.display_name : "Użytkownik"} nie ma jeszcze
+                  żadnych zarejestrowanych aktywności.
+                </div>
+              )
             ) : (
               <>
+                <div className="user-voice-stat">
+                  <span className="user-voice-stat-label">🔊 Czas na kanałach głosowych</span>
+                  <span className="user-voice-stat-value">{fmtHours(selectedUserVoiceSeconds)}</span>
+                </div>
                 <Donut
                   items={[...selectedUserGames].sort((a, b) => b.total_seconds - a.total_seconds)}
                   getLabel={(g) => g.activity_name}

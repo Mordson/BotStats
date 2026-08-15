@@ -146,7 +146,7 @@ export default function Dashboard({
       <div className="page">
         <header className="topbar">
           <div className="brand">
-            <div className="logo">◆</div>
+            <img className="logo" src="/icon.svg" alt="" width={28} height={28} />
             <div className="brand-text">
               <h1>Discord Activity Dashboard</h1>
               <p>Statystyki aktywności serwera "Piwo i Rzygowiny"</p>

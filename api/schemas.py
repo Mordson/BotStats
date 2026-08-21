@@ -38,6 +38,16 @@ class VoiceTimeOut(BaseModel):
         return str(value)
 
 
+class ChannelTimeOut(BaseModel):
+    channel_id: int
+    channel_name: str
+    total_seconds: int
+
+    @field_serializer("channel_id")
+    def serialize_channel_id(self, value: int) -> str:
+        return str(value)
+
+
 class GameTimeOut(BaseModel):
     activity_name: str
     total_seconds: int

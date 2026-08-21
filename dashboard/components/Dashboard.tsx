@@ -4,13 +4,14 @@ import { useState } from "react";
 import RankingList from "./RankingList";
 import Donut from "./Donut";
 import { TIME_RANGES, colorFor, fmtHours, sinceIso } from "@/lib/format";
-import type { GameTimeOut, UserGameTimeOut, UserOut, VoiceTimeOut } from "@/lib/api";
+import type { ChannelTimeOut, GameTimeOut, UserGameTimeOut, UserOut, VoiceTimeOut } from "@/lib/api";
 
 type Tab = "voice" | "games" | "user";
 
 interface DashboardProps {
   initialSinceHours: number;
   initialVoiceData: VoiceTimeOut[];
+  initialChannelsData: ChannelTimeOut[];
   initialGamesData: GameTimeOut[];
   initialUsers: UserOut[];
   initialError: string | null;
@@ -22,6 +23,7 @@ const CONNECTION_ERROR = "Nie można połączyć się z API. Upewnij się, że b
 export default function Dashboard({
   initialSinceHours,
   initialVoiceData,
+  initialChannelsData,
   initialGamesData,
   initialUsers,
   initialError,
@@ -29,6 +31,7 @@ export default function Dashboard({
   const [sinceHours, setSinceHours] = useState(initialSinceHours);
   const [activeTab, setActiveTab] = useState<Tab>("voice");
   const [voiceData, setVoiceData] = useState(initialVoiceData);
+  const [channelsData, setChannelsData] = useState(initialChannelsData);
   const [gamesData, setGamesData] = useState(initialGamesData);
   const [users, setUsers] = useState(initialUsers);
   const [gamesLimit, setGamesLimit] = useState(10);
@@ -46,17 +49,20 @@ export default function Dashboard({
     setRangeLoading(true);
     const since = sinceIso(hours);
     try {
-      const [voiceResp, gamesResp] = await Promise.all([
+      const [voiceResp, channelsResp, gamesResp] = await Promise.all([
         fetch(`/api/stats/voice-time?since=${encodeURIComponent(since)}`),
+        fetch(`/api/stats/voice-channels?since=${encodeURIComponent(since)}`),
         fetch(`/api/stats/top-games?since=${encodeURIComponent(since)}&limit=1000`),
       ]);
-      if (!voiceResp.ok || !gamesResp.ok) throw new Error("http");
+      if (!voiceResp.ok || !channelsResp.ok || !gamesResp.ok) throw new Error("http");
       setVoiceData(await voiceResp.json());
+      setChannelsData(await channelsResp.json());
       setGamesData(await gamesResp.json());
       setError(null);
     } catch {
       setError(CONNECTION_ERROR);
       setVoiceData([]);
+      setChannelsData([]);
       setGamesData([]);
     } finally {
       setRangeLoading(false);
@@ -124,6 +130,8 @@ export default function Dashboard({
   const activePlayers = voiceData.filter((u) => u.total_seconds > 0).length;
   const topGame = gamesData[0]?.activity_name ?? "–";
   const trackedGames = gamesData.length;
+  const topChannel = channelsData[0]?.channel_name ?? "–";
+  const gamesTotal = gamesData.reduce((sum, g) => sum + g.total_seconds, 0);
   const periodLabel = TIME_RANGES.find((r) => r.hours === sinceHours)?.label ?? "";
 
   const shownGames = gamesData.slice(0, gamesLimit);
@@ -180,9 +188,9 @@ export default function Dashboard({
             </div>
           </div>
           <div className="card">
-            <div className="card-label">Aktywni gracze</div>
+            <div className="card-label">Łączny czas na grach</div>
             <div className={`card-value${rangeLoading ? " skeleton" : ""}`}>
-              {rangeLoading ? "–" : activePlayers.toLocaleString("pl-PL")}
+              {rangeLoading ? "–" : fmtHours(gamesTotal)}
             </div>
           </div>
           <div className="card">
@@ -192,9 +200,21 @@ export default function Dashboard({
             </div>
           </div>
           <div className="card">
+            <div className="card-label">Aktywni gracze</div>
+            <div className={`card-value${rangeLoading ? " skeleton" : ""}`}>
+              {rangeLoading ? "–" : activePlayers.toLocaleString("pl-PL")}
+            </div>
+          </div>
+          <div className="card">
             <div className="card-label">Śledzone gry</div>
             <div className={`card-value${rangeLoading ? " skeleton" : ""}`}>
               {rangeLoading ? "–" : trackedGames.toLocaleString("pl-PL")}
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-label">Najczęściej odwiedzany kanał</div>
+            <div className={`card-value${rangeLoading ? " skeleton" : ""}`}>
+              {rangeLoading ? "–" : topChannel}
             </div>
           </div>
         </section>

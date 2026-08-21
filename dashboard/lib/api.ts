@@ -15,6 +15,12 @@ export interface VoiceTimeOut {
   total_seconds: number;
 }
 
+export interface ChannelTimeOut {
+  channel_id: string;
+  channel_name: string;
+  total_seconds: number;
+}
+
 export interface GameTimeOut {
   activity_name: string;
   total_seconds: number;

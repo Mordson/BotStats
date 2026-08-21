@@ -170,7 +170,7 @@ select option {
 /* ---------- overview cards ---------- */
 .cards {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 14px;
   margin-bottom: 26px;
 }
@@ -192,6 +192,12 @@ select option {
 }
 .card:nth-child(4) {
   --accent: var(--teal);
+}
+.card:nth-child(5) {
+  --accent: var(--amber);
+}
+.card:nth-child(6) {
+  --accent: var(--blue);
 }
 .card-label {
   font-size: 11px;

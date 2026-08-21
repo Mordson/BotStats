@@ -188,15 +188,21 @@ export default function Dashboard({
             </div>
           </div>
           <div className="card">
-            <div className="card-label">Aktywni gracze</div>
+            <div className="card-label">Łączny czas na grach</div>
             <div className={`card-value${rangeLoading ? " skeleton" : ""}`}>
-              {rangeLoading ? "–" : activePlayers.toLocaleString("pl-PL")}
+              {rangeLoading ? "–" : fmtHours(gamesTotal)}
             </div>
           </div>
           <div className="card">
             <div className="card-label">Najpopularniejsza gra</div>
             <div className={`card-value${rangeLoading ? " skeleton" : ""}`}>
               {rangeLoading ? "–" : topGame}
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-label">Aktywni gracze</div>
+            <div className={`card-value${rangeLoading ? " skeleton" : ""}`}>
+              {rangeLoading ? "–" : activePlayers.toLocaleString("pl-PL")}
             </div>
           </div>
           <div className="card">
@@ -209,12 +215,6 @@ export default function Dashboard({
             <div className="card-label">Najczęściej odwiedzany kanał</div>
             <div className={`card-value${rangeLoading ? " skeleton" : ""}`}>
               {rangeLoading ? "–" : topChannel}
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-label">Łączny czas na grach</div>
-            <div className={`card-value${rangeLoading ? " skeleton" : ""}`}>
-              {rangeLoading ? "–" : fmtHours(gamesTotal)}
             </div>
           </div>
         </section>

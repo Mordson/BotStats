@@ -26,6 +26,20 @@ def test_collapses_extra_whitespace():
     assert _normalize_activity_name("Valorant   ") == "Valorant"
 
 
+def test_stalker_2_alias_normalizes_to_full_title():
+    assert (
+        _normalize_activity_name("S.T.A.L.K.E.R. 2")
+        == "S.T.A.L.K.E.R. 2 Heart of Chornobyl"
+    )
+
+
+def test_stalker_2_variants_aggregate_together():
+    rows = [("S.T.A.L.K.E.R. 2", 10), ("S.T.A.L.K.E.R. 2 Heart of Chornobyl", 5)]
+    assert _aggregate_by_normalized_name(rows) == [
+        ("S.T.A.L.K.E.R. 2 Heart of Chornobyl", 15)
+    ]
+
+
 def test_aggregate_empty_rows_returns_empty_list():
     assert _aggregate_by_normalized_name([]) == []
 

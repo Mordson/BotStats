@@ -20,15 +20,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.models import ActivitySession, User, VoiceSession
 
 
+
+# Games Discord sometimes reports under multiple, unrelated-looking names (e.g. a
+# short title vs. the full subtitled title) that the generic punctuation/whitespace
+# normalization below can't unify on its own. Keys are lowercased, already-normalized
+# names; values are the canonical display name to collapse them into.
+_ACTIVITY_NAME_ALIASES: dict[str, str] = {
+    "s.t.a.l.k.e.r. 2": "S.T.A.L.K.E.R. 2 Heart of Chornobyl",
+}
+
+
 def _normalize_activity_name(name: str) -> str:
     """Strips trademark symbols and normalizes subtitle separators.
 
     E.g. 'Call of Duty® Black Ops 7' and 'Call of Duty: Black Ops 7'
-    are treated as the same game.
+    are treated as the same game. Also collapses known aliases (see
+    `_ACTIVITY_NAME_ALIASES`) for games Discord reports under different names.
     """
     name = re.sub(r'[®™℠]', '', name)
     name = name.replace(': ', ' ')
-    return re.sub(r'\s+', ' ', name).strip()
+    name = re.sub(r'\s+', ' ', name).strip()
+    return _ACTIVITY_NAME_ALIASES.get(name.lower(), name)
 
 
 def _aggregate_by_normalized_name(

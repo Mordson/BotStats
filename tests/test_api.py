@@ -99,6 +99,55 @@ async def test_voice_time_leaderboard_since_filters_older_sessions(api_client, d
     assert response.json() == []
 
 
+async def test_voice_channel_leaderboard_sorted_descending(api_client, db_session):
+    await _create_user(db_session, user_id=1, display_name="Alice")
+    await _create_user(db_session, user_id=2, display_name="Bob")
+    voice = VoiceSessionRepository(db_session)
+    now = datetime.now(timezone.utc)
+
+    short_session = await voice.start_session(
+        user_id=1, guild_id=1, channel_id=100, channel_name="General", start_time=now
+    )
+    await voice.close_session(short_session, now + timedelta(seconds=10))
+    long_session = await voice.start_session(
+        user_id=2, guild_id=1, channel_id=200, channel_name="Gaming", start_time=now
+    )
+    await voice.close_session(long_session, now + timedelta(seconds=100))
+    await db_session.commit()
+
+    response = api_client.get("/stats/voice-channels")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [row["channel_name"] for row in body] == ["Gaming", "General"]
+    assert body[0]["channel_id"] == "200"
+    assert body[0]["total_seconds"] == 100
+
+
+async def test_voice_channel_leaderboard_merges_same_channel_across_users(api_client, db_session):
+    await _create_user(db_session, user_id=1, display_name="Alice")
+    await _create_user(db_session, user_id=2, display_name="Bob")
+    voice = VoiceSessionRepository(db_session)
+    now = datetime.now(timezone.utc)
+
+    session_a = await voice.start_session(
+        user_id=1, guild_id=1, channel_id=100, channel_name="General", start_time=now
+    )
+    await voice.close_session(session_a, now + timedelta(seconds=30))
+    session_b = await voice.start_session(
+        user_id=2, guild_id=1, channel_id=100, channel_name="General", start_time=now
+    )
+    await voice.close_session(session_b, now + timedelta(seconds=20))
+    await db_session.commit()
+
+    response = api_client.get("/stats/voice-channels")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["total_seconds"] == 50
+
+
 async def test_top_games_respects_limit(api_client, db_session):
     await _create_user(db_session, user_id=1, display_name="Alice")
     activities = ActivitySessionRepository(db_session)

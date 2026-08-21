@@ -186,6 +186,44 @@ class VoiceSessionRepository:
                 totals[user_id] = totals.get(user_id, 0) + seconds
         return [(user_id, total) for user_id, total in totals.items()]
 
+    async def total_time_by_channel(
+        self, since: datetime | None = None
+    ) -> list[tuple[int, str, int]]:
+        """
+        Total time (in seconds) spent in each voice channel, across all users.
+
+        Same overlap-window semantics as `total_time_by_user`. Rows are grouped by
+        `channel_id` (not name) so a channel rename doesn't split its totals across
+        two entries; the most recently seen name is used for display.
+        """
+        now = datetime.now(timezone.utc)
+        since_utc = _as_aware_utc(since) if since is not None else None
+        conditions = []
+        if since_utc is not None:
+            conditions.append(or_(VoiceSession.end_time.is_(None), VoiceSession.end_time >= since_utc))
+        result = await self.session.execute(
+            select(
+                VoiceSession.channel_id,
+                VoiceSession.channel_name,
+                VoiceSession.start_time,
+                VoiceSession.end_time,
+            )
+            .where(*conditions)
+            .order_by(VoiceSession.start_time)
+        )
+        totals: dict[int, int] = {}
+        names: dict[int, str] = {}
+        for channel_id, channel_name, start_time, end_time in result.all():
+            window_start = _as_aware_utc(start_time)
+            if since_utc is not None and since_utc > window_start:
+                window_start = since_utc
+            window_end = _as_aware_utc(end_time) if end_time is not None else now
+            seconds = int((window_end - window_start).total_seconds())
+            if seconds > 0:
+                totals[channel_id] = totals.get(channel_id, 0) + seconds
+                names[channel_id] = channel_name  # rows are ordered by start_time, so this keeps the latest name
+        return [(channel_id, names[channel_id], total) for channel_id, total in totals.items()]
+
 
 class ActivitySessionRepository:
     def __init__(self, session: AsyncSession) -> None:

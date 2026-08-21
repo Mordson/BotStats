@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_db_session
-from api.schemas import GameTimeOut, VoiceTimeOut
+from api.schemas import ChannelTimeOut, GameTimeOut, VoiceTimeOut
 from config import settings
 from core.repositories import ActivitySessionRepository, UserRepository, VoiceSessionRepository
 
@@ -34,6 +34,22 @@ async def voice_time_leaderboard(
             total_seconds=seconds,
         )
         for user_id, seconds in rows
+    ]
+    return sorted(result, key=lambda item: item.total_seconds, reverse=True)
+
+
+@router.get("/voice-channels", response_model=list[ChannelTimeOut])
+async def voice_channel_leaderboard(
+    since: datetime | None = None,
+    session: AsyncSession = Depends(get_db_session),
+) -> list[ChannelTimeOut]:
+    """Voice channel leaderboard by total time spent, across all users."""
+    voice_repo = VoiceSessionRepository(session)
+    rows = await voice_repo.total_time_by_channel(since=since)
+
+    result = [
+        ChannelTimeOut(channel_id=channel_id, channel_name=channel_name, total_seconds=seconds)
+        for channel_id, channel_name, seconds in rows
     ]
     return sorted(result, key=lambda item: item.total_seconds, reverse=True)
 

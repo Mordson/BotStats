@@ -20,6 +20,7 @@ export default function Donut<T>({
   const totalAll = items.reduce((s, item) => s + getValue(item), 0);
   const donutSlices = items.slice(0, 8);
   const otherSeconds = items.slice(8).reduce((s, item) => s + getValue(item), 0);
+  const soleItem = items.length === 1 ? items[0] : null;
 
   let acc = 0;
   const stops: string[] = [];
@@ -43,7 +44,7 @@ export default function Donut<T>({
         <div className="donut" style={{ background }}>
           <div className="donut-center">
             <div className="val">{fmtHours(totalAll)}</div>
-            <div className="lbl">{centerLabel}</div>
+            <div className="lbl">{soleItem ? getLabel(soleItem) : centerLabel}</div>
           </div>
         </div>
         {periodLabel && <div className="donut-period">{periodLabel}</div>}

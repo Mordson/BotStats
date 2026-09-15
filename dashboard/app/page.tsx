@@ -7,12 +7,13 @@ import {
   type UserOut,
   type VoiceTimeOut,
 } from "@/lib/api";
-import { sinceIso } from "@/lib/format";
+import { presetRange, rangeToParams } from "@/lib/format";
 
 const DEFAULT_HOURS = 24;
 
 export default async function Page() {
-  const since = sinceIso(DEFAULT_HOURS);
+  const initialDateRange = presetRange(DEFAULT_HOURS);
+  const { since } = rangeToParams(initialDateRange);
 
   let voiceData: VoiceTimeOut[] = [];
   let channelsData: ChannelTimeOut[] = [];
@@ -33,7 +34,7 @@ export default async function Page() {
 
   return (
     <Dashboard
-      initialSinceHours={DEFAULT_HOURS}
+      initialDateRange={initialDateRange}
       initialVoiceData={voiceData}
       initialChannelsData={channelsData}
       initialGamesData={gamesData}

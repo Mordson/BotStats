@@ -3,9 +3,10 @@ import { apiFetch, ApiError, GameTimeOut } from "@/lib/api";
 
 export async function GET(request: NextRequest) {
   const since = request.nextUrl.searchParams.get("since") ?? undefined;
+  const until = request.nextUrl.searchParams.get("until") ?? undefined;
   const limit = request.nextUrl.searchParams.get("limit") ?? undefined;
   try {
-    const data = await apiFetch<GameTimeOut[]>("/stats/top-games", { since, limit });
+    const data = await apiFetch<GameTimeOut[]>("/stats/top-games", { since, until, limit });
     return NextResponse.json(data);
   } catch (err) {
     const message = err instanceof ApiError ? err.message : "Nieznany błąd API";

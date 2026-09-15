@@ -13,8 +13,9 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from typing import Iterable, TypeVar
 
-from sqlalchemy import or_, select
+from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import ActivitySession, User, VoiceSession
@@ -77,6 +78,57 @@ def _as_aware_utc(value: datetime) -> datetime:
 
 def _duration_seconds(start: datetime, end: datetime) -> int:
     return int((_as_aware_utc(end) - _as_aware_utc(start)).total_seconds())
+
+
+_K = TypeVar("_K")
+
+
+def _window_conditions(
+    since: datetime | None,
+    until: datetime | None,
+    start_col: ColumnElement[datetime],
+    end_col: ColumnElement[datetime | None],
+) -> list[ColumnElement[bool]]:
+    """SQL conditions restricting rows to those that can overlap [since, until].
+
+    A still-open row (`end_col` is NULL) always passes the `until` side - it's
+    only excluded there once actually closed after `until`, since open rows are
+    clamped to `until` (or now) when summed, not dropped.
+    """
+    conditions: list[ColumnElement[bool]] = []
+    if since is not None:
+        conditions.append(or_(end_col.is_(None), end_col >= since))
+    if until is not None:
+        conditions.append(start_col <= until)
+    return conditions
+
+
+def _sum_overlap_seconds(
+    rows: Iterable[tuple[_K, datetime, datetime | None]],
+    since: datetime | None,
+    until: datetime | None,
+    now: datetime,
+) -> dict[_K, int]:
+    """
+    Sums, per key, the seconds of each (start, end) row that overlap [since, until].
+
+    A row that starts before `since` or ends after `until` is only partially
+    counted instead of dropped; a still-open row (`end` is None) counts its
+    in-progress duration up to `until` (or `now` if `until` is None). `since`
+    and `until`, if given, must already be timezone-aware UTC.
+    """
+    totals: dict[_K, int] = {}
+    for key, start, end in rows:
+        window_start = _as_aware_utc(start)
+        if since is not None and since > window_start:
+            window_start = since
+        window_end = _as_aware_utc(end) if end is not None else now
+        if until is not None and until < window_end:
+            window_end = until
+        seconds = int((window_end - window_start).total_seconds())
+        if seconds > 0:
+            totals[key] = totals.get(key, 0) + seconds
+    return totals
 
 
 class UserRepository:
@@ -158,36 +210,30 @@ class VoiceSessionRepository:
         await self.session.flush()
 
 
-    async def total_time_by_user(self, since: datetime | None = None) -> list[tuple[int, int]]:
+    async def total_time_by_user(
+        self, since: datetime | None = None, until: datetime | None = None
+    ) -> list[tuple[int, int]]:
         """
         Total time (in seconds) spent in voice channels, grouped by user.
 
-        Counts only the part of each session that overlaps [since, now] - a session
-        that started before `since` but ended (or is still open) after it is
-        partially counted instead of being dropped entirely, and currently open
-        sessions count their in-progress duration up to now.
+        Counts only the part of each session that overlaps [since, until] - see
+        `_sum_overlap_seconds` for the overlap/clamping semantics. `until` defaults
+        to now when omitted.
         """
         now = datetime.now(timezone.utc)
         since_utc = _as_aware_utc(since) if since is not None else None
-        conditions = []
-        if since_utc is not None:
-            conditions.append(or_(VoiceSession.end_time.is_(None), VoiceSession.end_time >= since_utc))
+        until_utc = _as_aware_utc(until) if until is not None else None
+        conditions = _window_conditions(
+            since_utc, until_utc, VoiceSession.start_time, VoiceSession.end_time
+        )
         result = await self.session.execute(
             select(VoiceSession.user_id, VoiceSession.start_time, VoiceSession.end_time).where(*conditions)
         )
-        totals: dict[int, int] = {}
-        for user_id, start_time, end_time in result.all():
-            window_start = _as_aware_utc(start_time)
-            if since_utc is not None and since_utc > window_start:
-                window_start = since_utc
-            window_end = _as_aware_utc(end_time) if end_time is not None else now
-            seconds = int((window_end - window_start).total_seconds())
-            if seconds > 0:
-                totals[user_id] = totals.get(user_id, 0) + seconds
-        return [(user_id, total) for user_id, total in totals.items()]
+        totals = _sum_overlap_seconds(result.all(), since_utc, until_utc, now)
+        return list(totals.items())
 
     async def total_time_by_channel(
-        self, since: datetime | None = None
+        self, since: datetime | None = None, until: datetime | None = None
     ) -> list[tuple[int, str, int]]:
         """
         Total time (in seconds) spent in each voice channel, across all users.
@@ -198,9 +244,10 @@ class VoiceSessionRepository:
         """
         now = datetime.now(timezone.utc)
         since_utc = _as_aware_utc(since) if since is not None else None
-        conditions = []
-        if since_utc is not None:
-            conditions.append(or_(VoiceSession.end_time.is_(None), VoiceSession.end_time >= since_utc))
+        until_utc = _as_aware_utc(until) if until is not None else None
+        conditions = _window_conditions(
+            since_utc, until_utc, VoiceSession.start_time, VoiceSession.end_time
+        )
         result = await self.session.execute(
             select(
                 VoiceSession.channel_id,
@@ -211,16 +258,16 @@ class VoiceSessionRepository:
             .where(*conditions)
             .order_by(VoiceSession.start_time)
         )
-        totals: dict[int, int] = {}
+        rows = result.all()
+        totals = _sum_overlap_seconds(
+            ((channel_id, start_time, end_time) for channel_id, _, start_time, end_time in rows),
+            since_utc,
+            until_utc,
+            now,
+        )
         names: dict[int, str] = {}
-        for channel_id, channel_name, start_time, end_time in result.all():
-            window_start = _as_aware_utc(start_time)
-            if since_utc is not None and since_utc > window_start:
-                window_start = since_utc
-            window_end = _as_aware_utc(end_time) if end_time is not None else now
-            seconds = int((window_end - window_start).total_seconds())
-            if seconds > 0:
-                totals[channel_id] = totals.get(channel_id, 0) + seconds
+        for channel_id, channel_name, _, _ in rows:
+            if channel_id in totals:
                 names[channel_id] = channel_name  # rows are ordered by start_time, so this keeps the latest name
         return [(channel_id, names[channel_id], total) for channel_id, total in totals.items()]
 
@@ -283,20 +330,21 @@ class ActivitySessionRepository:
         self,
         limit: int = 10,
         since: datetime | None = None,
+        until: datetime | None = None,
         role_ids: list[int] | None = None,
     ) -> list[tuple[str, int]]:
         """
         Game leaderboard (activity_type == 'playing') by total play time.
 
-        Counts only the part of each session that overlaps [since, now] - a session
-        that started before `since` but ended (or is still open) after it is
-        partially counted instead of being dropped entirely.
+        Same overlap-window semantics as `VoiceSessionRepository.total_time_by_user`.
         """
         now = datetime.now(timezone.utc)
         since_utc = _as_aware_utc(since) if since is not None else None
+        until_utc = _as_aware_utc(until) if until is not None else None
         conditions = [ActivitySession.activity_type == "playing"]
-        if since_utc is not None:
-            conditions.append(or_(ActivitySession.end_time.is_(None), ActivitySession.end_time >= since_utc))
+        conditions += _window_conditions(
+            since_utc, until_utc, ActivitySession.start_time, ActivitySession.end_time
+        )
         query = select(
             ActivitySession.activity_name, ActivitySession.start_time, ActivitySession.end_time
         ).where(*conditions)
@@ -305,46 +353,30 @@ class ActivitySessionRepository:
                 User.role_ids.overlap(role_ids)
             )
         result = await self.session.execute(query)
-        rows: list[tuple[str, int]] = []
-        for name, start_time, end_time in result.all():
-            window_start = _as_aware_utc(start_time)
-            if since_utc is not None and since_utc > window_start:
-                window_start = since_utc
-            window_end = _as_aware_utc(end_time) if end_time is not None else now
-            seconds = int((window_end - window_start).total_seconds())
-            if seconds > 0:
-                rows.append((name, seconds))
-        return _aggregate_by_normalized_name(rows, limit)
+        totals = _sum_overlap_seconds(result.all(), since_utc, until_utc, now)
+        return _aggregate_by_normalized_name(list(totals.items()), limit)
 
     async def total_game_time_by_user(
-        self, user_id: int, since: datetime | None = None
+        self, user_id: int, since: datetime | None = None, until: datetime | None = None
     ) -> list[tuple[str, int]]:
         """The given user's play time, grouped by game name.
 
-        Counts only the part of each session that overlaps [since, now] - a session
-        that started before `since` but ended (or is still open) after it is
-        partially counted instead of being dropped entirely.
+        Same overlap-window semantics as `VoiceSessionRepository.total_time_by_user`.
         """
         now = datetime.now(timezone.utc)
         since_utc = _as_aware_utc(since) if since is not None else None
+        until_utc = _as_aware_utc(until) if until is not None else None
         conditions = [
             ActivitySession.user_id == user_id,
             ActivitySession.activity_type == "playing",
         ]
-        if since_utc is not None:
-            conditions.append(or_(ActivitySession.end_time.is_(None), ActivitySession.end_time >= since_utc))
+        conditions += _window_conditions(
+            since_utc, until_utc, ActivitySession.start_time, ActivitySession.end_time
+        )
         result = await self.session.execute(
             select(
                 ActivitySession.activity_name, ActivitySession.start_time, ActivitySession.end_time
             ).where(*conditions)
         )
-        rows: list[tuple[str, int]] = []
-        for name, start_time, end_time in result.all():
-            window_start = _as_aware_utc(start_time)
-            if since_utc is not None and since_utc > window_start:
-                window_start = since_utc
-            window_end = _as_aware_utc(end_time) if end_time is not None else now
-            seconds = int((window_end - window_start).total_seconds())
-            if seconds > 0:
-                rows.append((name, seconds))
-        return _aggregate_by_normalized_name(rows)
+        totals = _sum_overlap_seconds(result.all(), since_utc, until_utc, now)
+        return _aggregate_by_normalized_name(list(totals.items()))

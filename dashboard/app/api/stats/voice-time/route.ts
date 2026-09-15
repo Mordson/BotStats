@@ -3,8 +3,9 @@ import { apiFetch, ApiError, VoiceTimeOut } from "@/lib/api";
 
 export async function GET(request: NextRequest) {
   const since = request.nextUrl.searchParams.get("since") ?? undefined;
+  const until = request.nextUrl.searchParams.get("until") ?? undefined;
   try {
-    const data = await apiFetch<VoiceTimeOut[]>("/stats/voice-time", { since });
+    const data = await apiFetch<VoiceTimeOut[]>("/stats/voice-time", { since, until });
     return NextResponse.json(data);
   } catch (err) {
     const message = err instanceof ApiError ? err.message : "Nieznany błąd API";

@@ -128,7 +128,8 @@ body {
 }
 
 select,
-input[type="text"] {
+input[type="text"],
+input[type="date"] {
   background: var(--panel);
   border: 1px solid var(--panel-border);
   color: var(--text);
@@ -139,13 +140,28 @@ input[type="text"] {
   outline: none;
 }
 select:focus,
-input[type="text"]:focus {
+input[type="text"]:focus,
+input[type="date"]:focus {
   border-color: var(--cyan);
 }
 
 select option {
   background: #10141d;
   color: var(--text);
+}
+
+.time-range-picker {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.custom-range-fields {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .icon-btn {

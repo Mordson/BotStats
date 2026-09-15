@@ -99,6 +99,52 @@ async def test_voice_time_leaderboard_since_filters_older_sessions(api_client, d
     assert response.json() == []
 
 
+async def test_voice_time_leaderboard_until_filters_newer_sessions(api_client, db_session):
+    await _create_user(db_session, user_id=1, display_name="Alice")
+    voice = VoiceSessionRepository(db_session)
+    now = datetime.now(timezone.utc)
+    recent_session = await voice.start_session(
+        user_id=1, guild_id=1, channel_id=100, channel_name="General", start_time=now - timedelta(minutes=5)
+    )
+    await voice.close_session(recent_session, now)
+    await db_session.commit()
+
+    response = api_client.get(
+        "/stats/voice-time", params={"until": (now - timedelta(hours=1)).isoformat()}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+async def test_voice_time_leaderboard_since_and_until_select_custom_range(api_client, db_session):
+    await _create_user(db_session, user_id=1, display_name="Alice")
+    voice = VoiceSessionRepository(db_session)
+    now = datetime.now(timezone.utc)
+    in_range = await voice.start_session(
+        user_id=1, guild_id=1, channel_id=100, channel_name="General", start_time=now - timedelta(days=5)
+    )
+    await voice.close_session(in_range, now - timedelta(days=5) + timedelta(seconds=42))
+    out_of_range = await voice.start_session(
+        user_id=1, guild_id=1, channel_id=100, channel_name="General", start_time=now - timedelta(hours=1)
+    )
+    await voice.close_session(out_of_range, now)
+    await db_session.commit()
+
+    response = api_client.get(
+        "/stats/voice-time",
+        params={
+            "since": (now - timedelta(days=6)).isoformat(),
+            "until": (now - timedelta(days=4)).isoformat(),
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["total_seconds"] == 42
+
+
 async def test_voice_channel_leaderboard_sorted_descending(api_client, db_session):
     await _create_user(db_session, user_id=1, display_name="Alice")
     await _create_user(db_session, user_id=2, display_name="Bob")

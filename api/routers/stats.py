@@ -18,13 +18,14 @@ router = APIRouter(prefix="/stats", tags=["stats"])
 @router.get("/voice-time", response_model=list[VoiceTimeOut])
 async def voice_time_leaderboard(
     since: datetime | None = None,
+    until: datetime | None = None,
     session: AsyncSession = Depends(get_db_session),
 ) -> list[VoiceTimeOut]:
     """User leaderboard by total time spent in voice channels."""
     voice_repo = VoiceSessionRepository(session)
     user_repo = UserRepository(session)
 
-    rows = await voice_repo.total_time_by_user(since=since)
+    rows = await voice_repo.total_time_by_user(since=since, until=until)
     users_by_id = {user.id: user for user in await user_repo.get_all()}
 
     result = [
@@ -41,11 +42,12 @@ async def voice_time_leaderboard(
 @router.get("/voice-channels", response_model=list[ChannelTimeOut])
 async def voice_channel_leaderboard(
     since: datetime | None = None,
+    until: datetime | None = None,
     session: AsyncSession = Depends(get_db_session),
 ) -> list[ChannelTimeOut]:
     """Voice channel leaderboard by total time spent, across all users."""
     voice_repo = VoiceSessionRepository(session)
-    rows = await voice_repo.total_time_by_channel(since=since)
+    rows = await voice_repo.total_time_by_channel(since=since, until=until)
 
     result = [
         ChannelTimeOut(channel_id=channel_id, channel_name=channel_name, total_seconds=seconds)
@@ -58,9 +60,12 @@ async def voice_channel_leaderboard(
 async def top_games(
     limit: int = 10,
     since: datetime | None = None,
+    until: datetime | None = None,
     session: AsyncSession = Depends(get_db_session),
 ) -> list[GameTimeOut]:
     """Game leaderboard by total play time of users with visible roles."""
     repo = ActivitySessionRepository(session)
-    rows = await repo.top_games(limit=limit, since=since, role_ids=settings.visible_role_ids_list or None)
+    rows = await repo.top_games(
+        limit=limit, since=since, until=until, role_ids=settings.visible_role_ids_list or None
+    )
     return [GameTimeOut(activity_name=name, total_seconds=seconds) for name, seconds in rows]

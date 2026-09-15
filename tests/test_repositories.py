@@ -5,6 +5,7 @@ from core.repositories import (
     _as_aware_utc,
     _duration_seconds,
     _normalize_activity_name,
+    _sum_overlap_seconds,
 )
 
 
@@ -154,3 +155,73 @@ def test_as_aware_utc_attaches_utc_to_naive_datetime():
 def test_as_aware_utc_leaves_aware_datetime_unchanged():
     aware = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone(timedelta(hours=2)))
     assert _as_aware_utc(aware) == aware
+
+
+def test_sum_overlap_no_bounds_counts_full_closed_session():
+    now = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    start = now - timedelta(hours=1)
+    end = now - timedelta(minutes=30)
+    assert _sum_overlap_seconds([("u1", start, end)], None, None, now) == {"u1": 1800}
+
+
+def test_sum_overlap_no_bounds_clamps_open_session_to_now():
+    now = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    start = now - timedelta(minutes=10)
+    assert _sum_overlap_seconds([("u1", start, None)], None, None, now) == {"u1": 600}
+
+
+def test_sum_overlap_since_clamps_session_that_started_earlier():
+    now = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    since = now - timedelta(minutes=10)
+    start = now - timedelta(hours=1)
+    end = now
+    assert _sum_overlap_seconds([("u1", start, end)], since, None, now) == {"u1": 600}
+
+
+def test_sum_overlap_until_clamps_still_open_session():
+    now = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    until = now - timedelta(hours=1)
+    start = until - timedelta(minutes=10)
+    assert _sum_overlap_seconds([("u1", start, None)], None, until, now) == {"u1": 600}
+
+
+def test_sum_overlap_until_clamps_session_that_closed_after_until():
+    now = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    until = now - timedelta(hours=1)
+    start = until - timedelta(minutes=10)
+    end = now
+    assert _sum_overlap_seconds([("u1", start, end)], None, until, now) == {"u1": 600}
+
+
+def test_sum_overlap_since_and_until_narrow_a_longer_session():
+    since = datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
+    until = datetime(2024, 1, 1, 11, 0, 0, tzinfo=timezone.utc)
+    start = since - timedelta(hours=2)
+    end = until + timedelta(hours=2)
+    assert _sum_overlap_seconds([("u1", start, end)], since, until, until) == {"u1": 3600}
+
+
+def test_sum_overlap_session_entirely_before_since_is_excluded():
+    now = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    since = now - timedelta(hours=1)
+    start = since - timedelta(hours=2)
+    end = since - timedelta(hours=1)
+    assert _sum_overlap_seconds([("u1", start, end)], since, None, now) == {}
+
+
+def test_sum_overlap_session_entirely_after_until_is_excluded():
+    now = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    until = now - timedelta(hours=2)
+    start = until + timedelta(hours=1)
+    end = until + timedelta(hours=2)
+    assert _sum_overlap_seconds([("u1", start, end)], None, until, now) == {}
+
+
+def test_sum_overlap_groups_multiple_rows_by_key():
+    now = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    rows = [
+        ("u1", now - timedelta(minutes=10), now),
+        ("u1", now - timedelta(minutes=5), now),
+        ("u2", now - timedelta(minutes=1), now),
+    ]
+    assert _sum_overlap_seconds(rows, None, None, now) == {"u1": 900, "u2": 60}

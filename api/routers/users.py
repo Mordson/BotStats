@@ -35,9 +35,10 @@ async def get_user(user_id: int, session: AsyncSession = Depends(get_db_session)
 async def user_game_time(
     user_id: int,
     since: datetime | None = None,
+    until: datetime | None = None,
     session: AsyncSession = Depends(get_db_session),
 ) -> list[UserGameTimeOut]:
     """The given user's play time per game (seconds), optionally restricted to a time window."""
     repo = ActivitySessionRepository(session)
-    rows = await repo.total_game_time_by_user(user_id, since=since)
+    rows = await repo.total_game_time_by_user(user_id, since=since, until=until)
     return [UserGameTimeOut(activity_name=name, total_seconds=seconds) for name, seconds in rows]

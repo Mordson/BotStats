@@ -3,13 +3,14 @@
 import { useState } from "react";
 import RankingList from "./RankingList";
 import Donut from "./Donut";
-import { TIME_RANGES, colorFor, fmtHours, sinceIso } from "@/lib/format";
+import TimeRangePicker from "./TimeRangePicker";
+import { colorFor, fmtHours, formatRangeLabel, rangeKey, rangeToParams, type DateRange } from "@/lib/format";
 import type { ChannelTimeOut, GameTimeOut, UserGameTimeOut, UserOut, VoiceTimeOut } from "@/lib/api";
 
 type Tab = "voice" | "games" | "user";
 
 interface DashboardProps {
-  initialSinceHours: number;
+  initialDateRange: DateRange;
   initialVoiceData: VoiceTimeOut[];
   initialChannelsData: ChannelTimeOut[];
   initialGamesData: GameTimeOut[];
@@ -21,14 +22,14 @@ const GAMES_LIMIT_OPTIONS = [5, 10, 15, 20, 30, 50];
 const CONNECTION_ERROR = "Nie można połączyć się z API. Upewnij się, że bot i API są uruchomione.";
 
 export default function Dashboard({
-  initialSinceHours,
+  initialDateRange,
   initialVoiceData,
   initialChannelsData,
   initialGamesData,
   initialUsers,
   initialError,
 }: DashboardProps) {
-  const [sinceHours, setSinceHours] = useState(initialSinceHours);
+  const [dateRange, setDateRange] = useState<DateRange>(initialDateRange);
   const [activeTab, setActiveTab] = useState<Tab>("voice");
   const [voiceData, setVoiceData] = useState(initialVoiceData);
   const [channelsData, setChannelsData] = useState(initialChannelsData);
@@ -43,16 +44,17 @@ export default function Dashboard({
   const [rangeLoading, setRangeLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
 
-  const userGamesCacheKey = (userId: string, hours: number) => `${userId}:${hours}`;
+  const userGamesCacheKey = (userId: string, range: DateRange) => `${userId}:${rangeKey(range)}`;
 
-  async function loadRangeData(hours: number) {
+  async function loadRangeData(range: DateRange) {
     setRangeLoading(true);
-    const since = sinceIso(hours);
+    const params = new URLSearchParams(rangeToParams(range) as Record<string, string>);
+    const gamesParams = new URLSearchParams({ ...rangeToParams(range), limit: "1000" } as Record<string, string>);
     try {
       const [voiceResp, channelsResp, gamesResp] = await Promise.all([
-        fetch(`/api/stats/voice-time?since=${encodeURIComponent(since)}`),
-        fetch(`/api/stats/voice-channels?since=${encodeURIComponent(since)}`),
-        fetch(`/api/stats/top-games?since=${encodeURIComponent(since)}&limit=1000`),
+        fetch(`/api/stats/voice-time?${params}`),
+        fetch(`/api/stats/voice-channels?${params}`),
+        fetch(`/api/stats/top-games?${gamesParams}`),
       ]);
       if (!voiceResp.ok || !channelsResp.ok || !gamesResp.ok) throw new Error("http");
       setVoiceData(await voiceResp.json());
@@ -83,16 +85,14 @@ export default function Dashboard({
     }
   }
 
-  async function loadUserGames(userId: string, hours: number) {
+  async function loadUserGames(userId: string, range: DateRange) {
     setUserGamesLoading(true);
     try {
-      const since = sinceIso(hours);
-      const resp = await fetch(
-        `/api/users/${userId}/games?since=${encodeURIComponent(since)}`,
-      );
+      const params = new URLSearchParams(rangeToParams(range) as Record<string, string>);
+      const resp = await fetch(`/api/users/${userId}/games?${params}`);
       if (!resp.ok) throw new Error("http");
       const data: UserGameTimeOut[] = await resp.json();
-      setUserGamesCache((prev) => ({ ...prev, [userGamesCacheKey(userId, hours)]: data }));
+      setUserGamesCache((prev) => ({ ...prev, [userGamesCacheKey(userId, range)]: data }));
       setError(null);
     } catch {
       setError("Nie udało się pobrać danych użytkownika.");
@@ -101,29 +101,29 @@ export default function Dashboard({
     }
   }
 
-  function handleTimeRangeChange(hours: number) {
-    setSinceHours(hours);
-    void loadRangeData(hours);
-    if (activeTab === "user" && selectedUserId) void loadUserGames(selectedUserId, hours);
+  function handleTimeRangeChange(range: DateRange) {
+    setDateRange(range);
+    void loadRangeData(range);
+    if (activeTab === "user" && selectedUserId) void loadUserGames(selectedUserId, range);
   }
 
   function handleTabChange(tab: Tab) {
     setActiveTab(tab);
-    if (tab === "user" && selectedUserId && !userGamesCache[userGamesCacheKey(selectedUserId, sinceHours)]) {
-      void loadUserGames(selectedUserId, sinceHours);
+    if (tab === "user" && selectedUserId && !userGamesCache[userGamesCacheKey(selectedUserId, dateRange)]) {
+      void loadUserGames(selectedUserId, dateRange);
     }
   }
 
   function handleUserChange(userId: string) {
     setSelectedUserId(userId);
-    if (!userGamesCache[userGamesCacheKey(userId, sinceHours)]) void loadUserGames(userId, sinceHours);
+    if (!userGamesCache[userGamesCacheKey(userId, dateRange)]) void loadUserGames(userId, dateRange);
   }
 
   function handleRefresh() {
     setUserGamesCache({});
-    void loadRangeData(sinceHours);
+    void loadRangeData(dateRange);
     void loadUsers();
-    if (activeTab === "user" && selectedUserId) void loadUserGames(selectedUserId, sinceHours);
+    if (activeTab === "user" && selectedUserId) void loadUserGames(selectedUserId, dateRange);
   }
 
   const voiceTotal = voiceData.reduce((sum, u) => sum + u.total_seconds, 0);
@@ -132,11 +132,11 @@ export default function Dashboard({
   const trackedGames = gamesData.length;
   const topChannel = channelsData[0]?.channel_name ?? "–";
   const gamesTotal = gamesData.reduce((sum, g) => sum + g.total_seconds, 0);
-  const periodLabel = TIME_RANGES.find((r) => r.hours === sinceHours)?.label ?? "";
+  const periodLabel = formatRangeLabel(dateRange);
 
   const shownGames = gamesData.slice(0, gamesLimit);
   const selectedUserGames = selectedUserId
-    ? userGamesCache[userGamesCacheKey(selectedUserId, sinceHours)]
+    ? userGamesCache[userGamesCacheKey(selectedUserId, dateRange)]
     : undefined;
   const selectedUser = users.find((u) => u.id === selectedUserId);
   const selectedUserVoiceSeconds =
@@ -161,19 +161,7 @@ export default function Dashboard({
             </div>
           </div>
           <div className="topbar-controls">
-            <div>
-              <span className="field-label">Przedział czasowy</span>
-              <select
-                value={sinceHours}
-                onChange={(e) => handleTimeRangeChange(Number(e.target.value))}
-              >
-                {TIME_RANGES.map((r) => (
-                  <option key={r.hours} value={r.hours}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <TimeRangePicker value={dateRange} onChange={handleTimeRangeChange} />
             <button className="icon-btn" title="Odśwież" onClick={handleRefresh}>
               ⟳
             </button>

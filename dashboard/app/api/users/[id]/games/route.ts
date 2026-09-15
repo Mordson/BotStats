@@ -7,8 +7,9 @@ export async function GET(
 ) {
   const { id } = await params;
   const since = request.nextUrl.searchParams.get("since") ?? undefined;
+  const until = request.nextUrl.searchParams.get("until") ?? undefined;
   try {
-    const data = await apiFetch<UserGameTimeOut[]>(`/users/${id}/games`, { since });
+    const data = await apiFetch<UserGameTimeOut[]>(`/users/${id}/games`, { since, until });
     return NextResponse.json(data);
   } catch (err) {
     const message = err instanceof ApiError ? err.message : "Nieznany błąd API";

@@ -3,6 +3,7 @@ import {
   apiFetch,
   ApiError,
   type ChannelTimeOut,
+  type EngagementOut,
   type GameTimeOut,
   type UserOut,
   type VoiceTimeOut,
@@ -18,14 +19,16 @@ export default async function Page() {
   let voiceData: VoiceTimeOut[] = [];
   let channelsData: ChannelTimeOut[] = [];
   let gamesData: GameTimeOut[] = [];
+  let engagementData: EngagementOut[] = [];
   let users: UserOut[] = [];
   let error: string | null = null;
 
   try {
-    [voiceData, channelsData, gamesData, users] = await Promise.all([
+    [voiceData, channelsData, gamesData, engagementData, users] = await Promise.all([
       apiFetch<VoiceTimeOut[]>("/stats/voice-time", { since }),
       apiFetch<ChannelTimeOut[]>("/stats/voice-channels", { since }),
       apiFetch<GameTimeOut[]>("/stats/top-games", { since, limit: 1000 }),
+      apiFetch<EngagementOut[]>("/stats/engagement", { since }),
       apiFetch<UserOut[]>("/users/"),
     ]);
   } catch (err) {
@@ -38,6 +41,7 @@ export default async function Page() {
       initialVoiceData={voiceData}
       initialChannelsData={channelsData}
       initialGamesData={gamesData}
+      initialEngagementData={engagementData}
       initialUsers={users}
       initialError={error}
     />

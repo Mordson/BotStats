@@ -5,15 +5,23 @@ import RankingList from "./RankingList";
 import Donut from "./Donut";
 import TimeRangePicker from "./TimeRangePicker";
 import { colorFor, fmtHours, formatRangeLabel, rangeKey, rangeToParams, type DateRange } from "@/lib/format";
-import type { ChannelTimeOut, GameTimeOut, UserGameTimeOut, UserOut, VoiceTimeOut } from "@/lib/api";
+import type {
+  ChannelTimeOut,
+  EngagementOut,
+  GameTimeOut,
+  UserGameTimeOut,
+  UserOut,
+  VoiceTimeOut,
+} from "@/lib/api";
 
-type Tab = "voice" | "games" | "user";
+type Tab = "voice" | "games" | "user" | "engagement";
 
 interface DashboardProps {
   initialDateRange: DateRange;
   initialVoiceData: VoiceTimeOut[];
   initialChannelsData: ChannelTimeOut[];
   initialGamesData: GameTimeOut[];
+  initialEngagementData: EngagementOut[];
   initialUsers: UserOut[];
   initialError: string | null;
 }
@@ -26,6 +34,7 @@ export default function Dashboard({
   initialVoiceData,
   initialChannelsData,
   initialGamesData,
+  initialEngagementData,
   initialUsers,
   initialError,
 }: DashboardProps) {
@@ -34,6 +43,7 @@ export default function Dashboard({
   const [voiceData, setVoiceData] = useState(initialVoiceData);
   const [channelsData, setChannelsData] = useState(initialChannelsData);
   const [gamesData, setGamesData] = useState(initialGamesData);
+  const [engagementData, setEngagementData] = useState(initialEngagementData);
   const [users, setUsers] = useState(initialUsers);
   const [gamesLimit, setGamesLimit] = useState(10);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(
@@ -51,21 +61,24 @@ export default function Dashboard({
     const params = new URLSearchParams(rangeToParams(range) as Record<string, string>);
     const gamesParams = new URLSearchParams({ ...rangeToParams(range), limit: "1000" } as Record<string, string>);
     try {
-      const [voiceResp, channelsResp, gamesResp] = await Promise.all([
+      const [voiceResp, channelsResp, gamesResp, engagementResp] = await Promise.all([
         fetch(`/api/stats/voice-time?${params}`),
         fetch(`/api/stats/voice-channels?${params}`),
         fetch(`/api/stats/top-games?${gamesParams}`),
+        fetch(`/api/stats/engagement?${params}`),
       ]);
-      if (!voiceResp.ok || !channelsResp.ok || !gamesResp.ok) throw new Error("http");
+      if (!voiceResp.ok || !channelsResp.ok || !gamesResp.ok || !engagementResp.ok) throw new Error("http");
       setVoiceData(await voiceResp.json());
       setChannelsData(await channelsResp.json());
       setGamesData(await gamesResp.json());
+      setEngagementData(await engagementResp.json());
       setError(null);
     } catch {
       setError(CONNECTION_ERROR);
       setVoiceData([]);
       setChannelsData([]);
       setGamesData([]);
+      setEngagementData([]);
     } finally {
       setRangeLoading(false);
     }
@@ -226,6 +239,12 @@ export default function Dashboard({
           >
             👤 Użytkownik
           </button>
+          <button
+            className={`tab${activeTab === "engagement" ? " active" : ""}`}
+            onClick={() => handleTabChange("engagement")}
+          >
+            🎙️ Zaangażowanie
+          </button>
         </nav>
 
         <main>
@@ -371,6 +390,46 @@ export default function Dashboard({
                   getColor={(g, i) => colorFor(g.activity_name, i)}
                 />
               </>
+            )}
+          </section>
+
+          <section className="panel" hidden={activeTab !== "engagement"}>
+            <div className="panel-head">
+              <h2>Zaangażowanie - % czasu głosowego z mikrofonem/słuchawkami włączonymi</h2>
+            </div>
+            {rangeLoading ? (
+              <div className="loading-state">Ładowanie…</div>
+            ) : engagementData.length === 0 ? (
+              <div className="empty-state">
+                Brak danych - żaden śledzony użytkownik nie miał jeszcze czasu na kanale głosowym.
+              </div>
+            ) : (
+              <div className="engagement-columns">
+                <div>
+                  <div className="games-list-title">🎙️ Mikrofon (niewyciszony)</div>
+                  <RankingList
+                    items={[...engagementData].sort((a, b) => b.unmuted_percent - a.unmuted_percent)}
+                    getLabel={(e) => e.display_name}
+                    getValue={(e) => e.unmuted_percent}
+                    getDisplayValue={(e) => `${e.unmuted_percent}%`}
+                    getColor={(e) => colorFor(e.display_name)}
+                    useAvatar
+                  />
+                </div>
+                <div>
+                  <div className="games-list-title">🎧 Słuchawki (nieogłuszone)</div>
+                  <RankingList
+                    items={[...engagementData].sort(
+                      (a, b) => b.undeafened_percent - a.undeafened_percent,
+                    )}
+                    getLabel={(e) => e.display_name}
+                    getValue={(e) => e.undeafened_percent}
+                    getDisplayValue={(e) => `${e.undeafened_percent}%`}
+                    getColor={(e) => colorFor(e.display_name)}
+                    useAvatar
+                  />
+                </div>
+              </div>
             )}
           </section>
         </main>

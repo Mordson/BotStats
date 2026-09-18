@@ -6,6 +6,8 @@ interface RankingListProps<T> {
   getValue: (item: T) => number;
   getColor: (item: T, idx: number) => string;
   useAvatar?: boolean;
+  /** Text shown next to the bar; defaults to `getValue` formatted as hours/minutes. */
+  getDisplayValue?: (item: T) => string;
 }
 
 export default function RankingList<T>({
@@ -14,6 +16,7 @@ export default function RankingList<T>({
   getValue,
   getColor,
   useAvatar = false,
+  getDisplayValue,
 }: RankingListProps<T>) {
   const max = Math.max(...items.map(getValue), 1);
 
@@ -36,7 +39,9 @@ export default function RankingList<T>({
             <div className="rank-main">
               <div className="rank-top">
                 <div className="rank-name">{label}</div>
-                <div className="rank-value mono">{fmtHours(value)}</div>
+                <div className="rank-value mono">
+                  {getDisplayValue ? getDisplayValue(item) : fmtHours(value)}
+                </div>
               </div>
               <div className="bar-track">
                 <div

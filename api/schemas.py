@@ -56,3 +56,17 @@ class GameTimeOut(BaseModel):
 class UserGameTimeOut(BaseModel):
     activity_name: str
     total_seconds: int
+
+
+class EngagementOut(BaseModel):
+    user_id: int
+    display_name: str
+    voice_seconds: int
+    unmuted_seconds: int
+    undeafened_seconds: int
+    unmuted_percent: float
+    undeafened_percent: float
+
+    @field_serializer("user_id")
+    def serialize_user_id(self, value: int) -> str:
+        return str(value)

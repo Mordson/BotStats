@@ -16,7 +16,13 @@ from datetime import datetime, timezone
 import discord
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.repositories import ActivitySessionRepository, UserRepository, VoiceSessionRepository, _normalize_activity_name
+from core.repositories import (
+    ActivitySessionRepository,
+    UserRepository,
+    VoiceSessionRepository,
+    VoiceStateSessionRepository,
+    _normalize_activity_name,
+)
 
 
 class TrackingService:
@@ -25,6 +31,7 @@ class TrackingService:
         self.users = UserRepository(session)
         self.voice = VoiceSessionRepository(session)
         self.activities = ActivitySessionRepository(session)
+        self.voice_states = VoiceStateSessionRepository(session)
 
     async def ensure_user(self, member: discord.Member) -> None:
         """Ensures the user exists in the database (and updates their name and roles)."""
@@ -73,7 +80,45 @@ class TrackingService:
                 start_time=now,
             )
 
+        was_connected = before.channel is not None
+        is_connected = after.channel is not None
+        for kind, attr in (("unmuted", "self_mute"), ("undeafened", "self_deaf")):
+            await self._sync_voice_state_dimension(
+                member,
+                kind=kind,
+                now=now,
+                was_open=was_connected and not getattr(before, attr),
+                should_be_open=is_connected and not getattr(after, attr),
+            )
+
         await self.session.commit()
+
+    async def _sync_voice_state_dimension(
+        self,
+        member: discord.Member,
+        kind: str,
+        now: datetime,
+        was_open: bool,
+        should_be_open: bool,
+    ) -> None:
+        """
+        Opens/closes a Voice State Session (`kind` = 'unmuted' or 'undeafened') for one
+        dimension of self-chosen mic/headphone state.
+
+        `was_open`/`should_be_open` already fold "connected to some voice channel" and
+        "state enabled" into one flag each, so switching channels without changing
+        mute/deafen state (open before and after) or leaving voice while muted (closed
+        before and after) are both no-ops here - only an actual open/closed transition
+        touches the database.
+        """
+        if should_be_open and not was_open:
+            await self.voice_states.start_session(
+                user_id=member.id, guild_id=member.guild.id, kind=kind, start_time=now
+            )
+        elif was_open and not should_be_open:
+            open_session = await self.voice_states.get_open_session(member.id, kind)
+            if open_session is not None:
+                await self.voice_states.close_session(open_session, now)
 
     async def handle_presence_update(
         self,
@@ -145,6 +190,7 @@ class TrackingService:
         now = datetime.now(timezone.utc)
         await self.voice.close_all_open(now)
         await self.activities.close_all_open(now)
+        await self.voice_states.close_all_open(now)
         await self.session.commit()
 
     @staticmethod

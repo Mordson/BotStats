@@ -499,6 +499,12 @@ footer {
   text-align: center;
 }
 
+.engagement-columns {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 28px;
+}
+
 @media (max-width: 860px) {
   .cards {
     grid-template-columns: repeat(2, 1fr);
@@ -510,5 +516,8 @@ footer {
   }
   .donut-wrap {
     margin: 0 auto;
+  }
+  .engagement-columns {
+    grid-template-columns: 1fr;
   }
 }

@@ -1,9 +1,17 @@
 import discord
 from sqlalchemy import select
 
-from core.models import ActivitySession, User, VoiceSession
+from core.models import ActivitySession, User, VoiceSession, VoiceStateSession
 from core.services import TrackingService
 from tests.conftest import make_activity, make_member, make_role, make_voice_channel, make_voice_state
+
+
+async def _voice_state_sessions(db_session, kind: str | None = None):
+    query = select(VoiceStateSession)
+    if kind is not None:
+        query = query.where(VoiceStateSession.kind == kind)
+    result = await db_session.execute(query.order_by(VoiceStateSession.id))
+    return result.scalars().all()
 
 
 async def test_ensure_user_creates_new_user(tracking_service: TrackingService, db_session):
@@ -109,6 +117,158 @@ async def test_voice_same_channel_is_noop(tracking_service: TrackingService, db_
     sessions = result.scalars().all()
     assert len(sessions) == 1
     assert sessions[0].end_time is None
+
+
+async def test_voice_join_unmuted_and_undeafened_opens_both_dimensions(
+    tracking_service: TrackingService, db_session
+):
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel)
+    )
+
+    sessions = await _voice_state_sessions(db_session)
+    assert {s.kind for s in sessions} == {"unmuted", "undeafened"}
+    assert all(s.end_time is None for s in sessions)
+
+
+async def test_voice_join_already_muted_does_not_open_unmuted_session(
+    tracking_service: TrackingService, db_session
+):
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+
+    await tracking_service.handle_voice_state_update(
+        member,
+        make_voice_state(channel=None),
+        make_voice_state(channel=channel, self_mute=True),
+    )
+
+    sessions = await _voice_state_sessions(db_session)
+    assert {s.kind for s in sessions} == {"undeafened"}
+
+
+async def test_self_mute_while_in_channel_closes_unmuted_session_only(
+    tracking_service: TrackingService, db_session
+):
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel)
+    )
+    await tracking_service.handle_voice_state_update(
+        member,
+        make_voice_state(channel=channel),
+        make_voice_state(channel=channel, self_mute=True),
+    )
+
+    unmuted = await _voice_state_sessions(db_session, kind="unmuted")
+    undeafened = await _voice_state_sessions(db_session, kind="undeafened")
+    assert len(unmuted) == 1
+    assert unmuted[0].end_time is not None
+    assert unmuted[0].duration_seconds is not None
+    assert len(undeafened) == 1
+    assert undeafened[0].end_time is None
+
+
+async def test_self_unmute_after_mute_opens_new_unmuted_session(
+    tracking_service: TrackingService, db_session
+):
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel, self_mute=True)
+    )
+    await tracking_service.handle_voice_state_update(
+        member,
+        make_voice_state(channel=channel, self_mute=True),
+        make_voice_state(channel=channel, self_mute=False),
+    )
+
+    unmuted = await _voice_state_sessions(db_session, kind="unmuted")
+    assert len(unmuted) == 1
+    assert unmuted[0].end_time is None
+
+
+async def test_channel_switch_without_mute_change_keeps_session_uninterrupted(
+    tracking_service: TrackingService, db_session
+):
+    member = make_member(id=1)
+    channel_a = make_voice_channel(id=100, name="General")
+    channel_b = make_voice_channel(id=200, name="Gaming")
+
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel_a)
+    )
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=channel_a), make_voice_state(channel=channel_b)
+    )
+
+    unmuted = await _voice_state_sessions(db_session, kind="unmuted")
+    undeafened = await _voice_state_sessions(db_session, kind="undeafened")
+    assert len(unmuted) == 1
+    assert unmuted[0].end_time is None
+    assert len(undeafened) == 1
+    assert undeafened[0].end_time is None
+
+
+async def test_leaving_voice_closes_open_dimension_sessions(
+    tracking_service: TrackingService, db_session
+):
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel)
+    )
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=channel), make_voice_state(channel=None)
+    )
+
+    sessions = await _voice_state_sessions(db_session)
+    assert len(sessions) == 2
+    assert all(s.end_time is not None for s in sessions)
+
+
+async def test_self_deafen_closes_both_dimensions_at_once(
+    tracking_service: TrackingService, db_session
+):
+    """Discord's own client behavior: self-deafening also self-mutes in the same event."""
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel)
+    )
+    await tracking_service.handle_voice_state_update(
+        member,
+        make_voice_state(channel=channel),
+        make_voice_state(channel=channel, self_mute=True, self_deaf=True),
+    )
+
+    sessions = await _voice_state_sessions(db_session)
+    assert len(sessions) == 2
+    assert all(s.end_time is not None for s in sessions)
+
+
+async def test_cleanup_open_sessions_closes_voice_state_sessions(
+    tracking_service: TrackingService, db_session
+):
+    member = make_member(id=1)
+    channel = make_voice_channel(id=100, name="General")
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel)
+    )
+
+    await tracking_service.cleanup_open_sessions()
+
+    sessions = await _voice_state_sessions(db_session)
+    assert len(sessions) == 2
+    assert all(s.end_time is not None for s in sessions)
 
 
 async def test_presence_new_activity_opens_session(tracking_service: TrackingService, db_session):

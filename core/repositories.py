@@ -15,10 +15,10 @@ import re
 from datetime import datetime, timezone
 from typing import Iterable, TypeVar
 
-from sqlalchemy import ColumnElement, or_, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.models import ActivitySession, User, VoiceSession
+from core.models import ActivitySession, User, VoiceSession, VoiceStateSession
 
 
 
@@ -211,16 +211,22 @@ class VoiceSessionRepository:
 
 
     async def total_time_by_user(
-        self, since: datetime | None = None, until: datetime | None = None
+        self,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        now: datetime | None = None,
     ) -> list[tuple[int, int]]:
         """
         Total time (in seconds) spent in voice channels, grouped by user.
 
         Counts only the part of each session that overlaps [since, until] - see
         `_sum_overlap_seconds` for the overlap/clamping semantics. `until` defaults
-        to now when omitted.
+        to now when omitted. `now` (the instant a still-open session is clamped to)
+        defaults to the real current time - pass an explicit, shared value when
+        combining totals from several repositories in one request so they all
+        clamp open sessions to the same instant instead of drifting apart.
         """
-        now = datetime.now(timezone.utc)
+        now = now if now is not None else datetime.now(timezone.utc)
         since_utc = _as_aware_utc(since) if since is not None else None
         until_utc = _as_aware_utc(until) if until is not None else None
         conditions = _window_conditions(
@@ -270,6 +276,140 @@ class VoiceSessionRepository:
             if channel_id in totals:
                 names[channel_id] = channel_name  # rows are ordered by start_time, so this keeps the latest name
         return [(channel_id, names[channel_id], total) for channel_id, total in totals.items()]
+
+
+class VoiceStateSessionRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def start_session(
+        self,
+        user_id: int,
+        guild_id: int,
+        kind: str,
+        start_time: datetime,
+    ) -> VoiceStateSession:
+        session_obj = VoiceStateSession(
+            user_id=user_id, guild_id=guild_id, kind=kind, start_time=start_time
+        )
+        self.session.add(session_obj)
+        await self.session.flush()
+        return session_obj
+
+    async def earliest_start_time(self, kind: str) -> datetime | None:
+        """
+        The start_time of the very first tracked session of this kind, across all users.
+
+        This is the "tracking started" cutoff for real vs. estimated data (see
+        CONTEXT.md "Engagement") - None means no session of this kind has ever been
+        recorded yet (tracking hasn't produced any data for this kind at all).
+        """
+        result = await self.session.execute(
+            select(func.min(VoiceStateSession.start_time)).where(VoiceStateSession.kind == kind)
+        )
+        earliest = result.scalar_one_or_none()
+        return _as_aware_utc(earliest) if earliest is not None else None
+
+    async def get_open_session(self, user_id: int, kind: str) -> VoiceStateSession | None:
+        """Finds the user's currently open (unfinished) session of the given kind."""
+        result = await self.session.execute(
+            select(VoiceStateSession).where(
+                VoiceStateSession.user_id == user_id,
+                VoiceStateSession.kind == kind,
+                VoiceStateSession.end_time.is_(None),
+            )
+        )
+        return result.scalars().first()
+
+    async def close_session(
+        self, session_obj: VoiceStateSession, end_time: datetime
+    ) -> VoiceStateSession:
+        session_obj.end_time = end_time
+        session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
+        await self.session.flush()
+        return session_obj
+
+    async def close_all_open(self, end_time: datetime) -> None:
+        """Closes all 'orphaned' sessions (e.g. after a bot restart)."""
+        result = await self.session.execute(
+            select(VoiceStateSession).where(VoiceStateSession.end_time.is_(None))
+        )
+        for session_obj in result.scalars().all():
+            session_obj.end_time = end_time
+            session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
+        await self.session.flush()
+
+    async def total_time_by_user(
+        self,
+        kind: str,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        now: datetime | None = None,
+    ) -> list[tuple[int, int]]:
+        """
+        Total time (in seconds) spent with the given state (kind) enabled, grouped by user.
+
+        Same overlap-window (and shared-`now`) semantics as
+        `VoiceSessionRepository.total_time_by_user`.
+        """
+        now = now if now is not None else datetime.now(timezone.utc)
+        since_utc = _as_aware_utc(since) if since is not None else None
+        until_utc = _as_aware_utc(until) if until is not None else None
+        conditions = [VoiceStateSession.kind == kind]
+        conditions += _window_conditions(
+            since_utc, until_utc, VoiceStateSession.start_time, VoiceStateSession.end_time
+        )
+        result = await self.session.execute(
+            select(
+                VoiceStateSession.user_id, VoiceStateSession.start_time, VoiceStateSession.end_time
+            ).where(*conditions)
+        )
+        totals = _sum_overlap_seconds(result.all(), since_utc, until_utc, now)
+        return list(totals.items())
+
+    async def engagement_by_user(
+        self,
+        voice_repo: "VoiceSessionRepository",
+        kind: str,
+        voice_seconds_by_user: dict[int, int],
+        since: datetime | None,
+        until: datetime | None,
+        now: datetime,
+    ) -> tuple[dict[int, int], dict[int, bool]]:
+        """
+        Per-user (blended_seconds, estimated) for one kind - see CONTEXT.md "Engagement".
+
+        `kind`'s cutoff is the start_time of the very first session of that kind ever
+        recorded, across all users (`earliest_start_time`) - there is no real data
+        before it, so voice time before the cutoff counts as fully engaged; voice time
+        at or after it counts for real. If `kind` has never been tracked at all, the
+        cutoff is treated as infinitely far in the future, so the whole window falls
+        "before" it. Each kind has its own cutoff: e.g. if the very first member
+        tracked after deploy happened to already be muted, the 'unmuted' cutoff lags
+        behind the 'undeafened' one. `estimated` is True for a user whenever any of
+        *their* counted voice time falls before the cutoff. The blended total is
+        clamped to `voice_seconds_by_user` in case tracked state time and voice time
+        ever drift apart (they shouldn't, but a state session can never legitimately
+        outlast the voice presence it happened within).
+        """
+        cutoff = await self.earliest_start_time(kind) or datetime.max.replace(tzinfo=timezone.utc)
+        until_utc = _as_aware_utc(until) if until is not None else None
+        real_seconds_by_user = dict(
+            await self.total_time_by_user(kind, since=since, until=until_utc, now=now)
+        )
+        pre_cutoff_until = min(until_utc, cutoff) if until_utc is not None else min(now, cutoff)
+        pre_seconds_by_user = dict(
+            await voice_repo.total_time_by_user(since=since, until=pre_cutoff_until, now=now)
+        )
+
+        blended: dict[int, int] = {}
+        estimated: dict[int, bool] = {}
+        for user_id, voice_seconds in voice_seconds_by_user.items():
+            pre_seconds = pre_seconds_by_user.get(user_id, 0)
+            real_seconds = real_seconds_by_user.get(user_id, 0)
+            blended[user_id] = min(pre_seconds + real_seconds, voice_seconds)
+            estimated[user_id] = pre_seconds > 0
+        return blended, estimated
 
 
 class ActivitySessionRepository:

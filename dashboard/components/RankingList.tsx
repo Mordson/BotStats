@@ -6,6 +6,10 @@ interface RankingListProps<T> {
   getValue: (item: T) => number;
   getColor: (item: T, idx: number) => string;
   useAvatar?: boolean;
+  /** Text shown next to the bar; defaults to `getValue` formatted as hours/minutes. */
+  getDisplayValue?: (item: T) => string;
+  /** Native hover tooltip for the row; omit (or return undefined) for no tooltip. */
+  getTooltip?: (item: T) => string | undefined;
 }
 
 export default function RankingList<T>({
@@ -14,6 +18,8 @@ export default function RankingList<T>({
   getValue,
   getColor,
   useAvatar = false,
+  getDisplayValue,
+  getTooltip,
 }: RankingListProps<T>) {
   const max = Math.max(...items.map(getValue), 1);
 
@@ -24,7 +30,7 @@ export default function RankingList<T>({
         const value = getValue(item);
         const color = getColor(item, i);
         return (
-          <div className="rank-row" key={`${label}-${i}`}>
+          <div className="rank-row" key={`${label}-${i}`} title={getTooltip?.(item)}>
             <div className="rank-index mono">#{i + 1}</div>
             {useAvatar ? (
               <div className="avatar" style={{ background: color }}>
@@ -36,7 +42,9 @@ export default function RankingList<T>({
             <div className="rank-main">
               <div className="rank-top">
                 <div className="rank-name">{label}</div>
-                <div className="rank-value mono">{fmtHours(value)}</div>
+                <div className="rank-value mono">
+                  {getDisplayValue ? getDisplayValue(item) : fmtHours(value)}
+                </div>
               </div>
               <div className="bar-track">
                 <div

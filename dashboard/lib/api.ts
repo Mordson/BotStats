@@ -28,6 +28,18 @@ export interface GameTimeOut {
 
 export type UserGameTimeOut = GameTimeOut;
 
+export interface EngagementOut {
+  user_id: string;
+  display_name: string;
+  voice_seconds: number;
+  unmuted_seconds: number;
+  undeafened_seconds: number;
+  unmuted_percent: number;
+  undeafened_percent: number;
+  unmuted_estimated: boolean;
+  undeafened_estimated: boolean;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,

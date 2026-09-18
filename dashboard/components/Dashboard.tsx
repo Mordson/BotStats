@@ -5,15 +5,23 @@ import RankingList from "./RankingList";
 import Donut from "./Donut";
 import TimeRangePicker from "./TimeRangePicker";
 import { colorFor, fmtHours, formatRangeLabel, rangeKey, rangeToParams, type DateRange } from "@/lib/format";
-import type { ChannelTimeOut, GameTimeOut, UserGameTimeOut, UserOut, VoiceTimeOut } from "@/lib/api";
+import type {
+  ChannelTimeOut,
+  EngagementOut,
+  GameTimeOut,
+  UserGameTimeOut,
+  UserOut,
+  VoiceTimeOut,
+} from "@/lib/api";
 
-type Tab = "voice" | "games" | "user";
+type Tab = "voice" | "games" | "user" | "engagement";
 
 interface DashboardProps {
   initialDateRange: DateRange;
   initialVoiceData: VoiceTimeOut[];
   initialChannelsData: ChannelTimeOut[];
   initialGamesData: GameTimeOut[];
+  initialEngagementData: EngagementOut[];
   initialUsers: UserOut[];
   initialError: string | null;
 }
@@ -26,6 +34,7 @@ export default function Dashboard({
   initialVoiceData,
   initialChannelsData,
   initialGamesData,
+  initialEngagementData,
   initialUsers,
   initialError,
 }: DashboardProps) {
@@ -34,6 +43,7 @@ export default function Dashboard({
   const [voiceData, setVoiceData] = useState(initialVoiceData);
   const [channelsData, setChannelsData] = useState(initialChannelsData);
   const [gamesData, setGamesData] = useState(initialGamesData);
+  const [engagementData, setEngagementData] = useState(initialEngagementData);
   const [users, setUsers] = useState(initialUsers);
   const [gamesLimit, setGamesLimit] = useState(10);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(
@@ -51,21 +61,24 @@ export default function Dashboard({
     const params = new URLSearchParams(rangeToParams(range) as Record<string, string>);
     const gamesParams = new URLSearchParams({ ...rangeToParams(range), limit: "1000" } as Record<string, string>);
     try {
-      const [voiceResp, channelsResp, gamesResp] = await Promise.all([
+      const [voiceResp, channelsResp, gamesResp, engagementResp] = await Promise.all([
         fetch(`/api/stats/voice-time?${params}`),
         fetch(`/api/stats/voice-channels?${params}`),
         fetch(`/api/stats/top-games?${gamesParams}`),
+        fetch(`/api/stats/engagement?${params}`),
       ]);
-      if (!voiceResp.ok || !channelsResp.ok || !gamesResp.ok) throw new Error("http");
+      if (!voiceResp.ok || !channelsResp.ok || !gamesResp.ok || !engagementResp.ok) throw new Error("http");
       setVoiceData(await voiceResp.json());
       setChannelsData(await channelsResp.json());
       setGamesData(await gamesResp.json());
+      setEngagementData(await engagementResp.json());
       setError(null);
     } catch {
       setError(CONNECTION_ERROR);
       setVoiceData([]);
       setChannelsData([]);
       setGamesData([]);
+      setEngagementData([]);
     } finally {
       setRangeLoading(false);
     }
@@ -141,6 +154,29 @@ export default function Dashboard({
   const selectedUser = users.find((u) => u.id === selectedUserId);
   const selectedUserVoiceSeconds =
     voiceData.find((v) => v.user_id === selectedUserId)?.total_seconds ?? 0;
+
+  const engagementColumns: {
+    key: "unmuted" | "undeafened";
+    title: string;
+    percent: (e: EngagementOut) => number;
+    estimated: (e: EngagementOut) => boolean;
+    tooltip: string;
+  }[] = [
+    {
+      key: "unmuted",
+      title: "🎙️ Mikrofon (niewyciszony)",
+      percent: (e) => e.unmuted_percent,
+      estimated: (e) => e.unmuted_estimated,
+      tooltip: "Częściowo szacowane - brak danych o mikrofonie sprzed wdrożenia tej funkcji.",
+    },
+    {
+      key: "undeafened",
+      title: "🎧 Słuchawki (aktywne)",
+      percent: (e) => e.undeafened_percent,
+      estimated: (e) => e.undeafened_estimated,
+      tooltip: "Częściowo szacowane - brak danych o słuchawkach sprzed wdrożenia tej funkcji.",
+    },
+  ];
 
   return (
     <>
@@ -225,6 +261,12 @@ export default function Dashboard({
             onClick={() => handleTabChange("user")}
           >
             👤 Użytkownik
+          </button>
+          <button
+            className={`tab${activeTab === "engagement" ? " active" : ""}`}
+            onClick={() => handleTabChange("engagement")}
+          >
+            🎙️ Zaangażowanie
           </button>
         </nav>
 
@@ -370,6 +412,43 @@ export default function Dashboard({
                   getValue={(g) => g.total_seconds}
                   getColor={(g, i) => colorFor(g.activity_name, i)}
                 />
+              </>
+            )}
+          </section>
+
+          <section className="panel" hidden={activeTab !== "engagement"}>
+            <div className="panel-head">
+              <h2>Zaangażowanie - % czasu głosowego z mikrofonem/słuchawkami włączonymi</h2>
+            </div>
+            {rangeLoading ? (
+              <div className="loading-state">Ładowanie…</div>
+            ) : engagementData.length === 0 ? (
+              <div className="empty-state">
+                Brak danych - żaden śledzony użytkownik nie miał jeszcze czasu na kanale głosowym.
+              </div>
+            ) : (
+              <>
+                <div className="engagement-columns">
+                  {engagementColumns.map((col) => (
+                    <div key={col.key}>
+                      <div className="games-list-title">{col.title}</div>
+                      <RankingList
+                        items={[...engagementData].sort((a, b) => col.percent(b) - col.percent(a))}
+                        getLabel={(e) => e.display_name}
+                        getValue={col.percent}
+                        getDisplayValue={(e) => `${col.percent(e)}%${col.estimated(e) ? "*" : ""}`}
+                        getTooltip={(e) => (col.estimated(e) ? col.tooltip : undefined)}
+                        getColor={(e) => colorFor(e.display_name)}
+                        useAvatar
+                      />
+                    </div>
+                  ))}
+                </div>
+                {engagementData.some((e) => e.unmuted_estimated || e.undeafened_estimated) && (
+                  <p className="engagement-legend">
+                    * częściowo szacowane - okres sprzed wdrożenia tej funkcji liczony jako 100%.
+                  </p>
+                )}
               </>
             )}
           </section>

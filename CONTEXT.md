@@ -66,3 +66,23 @@ _Avoid_: Activity (Activity Session already means something else — games/strea
 explicitly does **not** mean actual audio/speaking detection (VAD), which would require the bot
 to join each voice channel as a voice client and read the voice-gateway directly — a materially
 different, far more invasive/expensive capability that is out of scope).
+
+**Tracking Cutoff**:
+For one kind (Unmuted or Undeafened independently), the start_time of the very first Voice
+State Session of that kind ever recorded, across all users — i.e. the moment this feature
+actually started producing data for that dimension. No real data exists before it, since the
+bot never tracked mute/deafen state until this feature shipped. If a kind has never produced a
+single row yet, its cutoff is effectively infinite (the whole history "predates tracking").
+Each kind gets its own independent cutoff, since the very first tracked member might already
+have been muted when the feature went live, delaying the Unmuted cutoff relative to the
+Undeafened one.
+
+**Estimated** (of an Engagement value):
+True for a given User/kind when any of that User's counted voice time, within the requested
+range, falls before that kind's Tracking Cutoff. Voice time before the cutoff is assumed fully
+engaged (100%) — since there's no real measurement for it — and blended proportionally with
+real tracked time after the cutoff into a single Engagement percentage; Estimated flags which
+users' numbers include that assumption, shown on the dashboard as a small marker rather than
+silently presenting an assumption as measured fact.
+_Avoid_: implying the whole value is fabricated — a User can be partially Estimated (some of
+their voice time is real, some assumed) and the two blend into one number, not two.

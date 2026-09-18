@@ -15,7 +15,7 @@ import re
 from datetime import datetime, timezone
 from typing import Iterable, TypeVar
 
-from sqlalchemy import ColumnElement, or_, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import ActivitySession, User, VoiceSession, VoiceStateSession
@@ -296,6 +296,20 @@ class VoiceStateSessionRepository:
         await self.session.flush()
         return session_obj
 
+    async def earliest_start_time(self, kind: str) -> datetime | None:
+        """
+        The start_time of the very first tracked session of this kind, across all users.
+
+        This is the "tracking started" cutoff for real vs. estimated data (see
+        CONTEXT.md "Engagement") - None means no session of this kind has ever been
+        recorded yet (tracking hasn't produced any data for this kind at all).
+        """
+        result = await self.session.execute(
+            select(func.min(VoiceStateSession.start_time)).where(VoiceStateSession.kind == kind)
+        )
+        earliest = result.scalar_one_or_none()
+        return _as_aware_utc(earliest) if earliest is not None else None
+
     async def get_open_session(self, user_id: int, kind: str) -> VoiceStateSession | None:
         """Finds the user's currently open (unfinished) session of the given kind."""
         result = await self.session.execute(
@@ -352,6 +366,50 @@ class VoiceStateSessionRepository:
         )
         totals = _sum_overlap_seconds(result.all(), since_utc, until_utc, now)
         return list(totals.items())
+
+    async def engagement_by_user(
+        self,
+        voice_repo: "VoiceSessionRepository",
+        kind: str,
+        voice_seconds_by_user: dict[int, int],
+        since: datetime | None,
+        until: datetime | None,
+        now: datetime,
+    ) -> tuple[dict[int, int], dict[int, bool]]:
+        """
+        Per-user (blended_seconds, estimated) for one kind - see CONTEXT.md "Engagement".
+
+        `kind`'s cutoff is the start_time of the very first session of that kind ever
+        recorded, across all users (`earliest_start_time`) - there is no real data
+        before it, so voice time before the cutoff counts as fully engaged; voice time
+        at or after it counts for real. If `kind` has never been tracked at all, the
+        cutoff is treated as infinitely far in the future, so the whole window falls
+        "before" it. Each kind has its own cutoff: e.g. if the very first member
+        tracked after deploy happened to already be muted, the 'unmuted' cutoff lags
+        behind the 'undeafened' one. `estimated` is True for a user whenever any of
+        *their* counted voice time falls before the cutoff. The blended total is
+        clamped to `voice_seconds_by_user` in case tracked state time and voice time
+        ever drift apart (they shouldn't, but a state session can never legitimately
+        outlast the voice presence it happened within).
+        """
+        cutoff = await self.earliest_start_time(kind) or datetime.max.replace(tzinfo=timezone.utc)
+        until_utc = _as_aware_utc(until) if until is not None else None
+        real_seconds_by_user = dict(
+            await self.total_time_by_user(kind, since=since, until=until_utc, now=now)
+        )
+        pre_cutoff_until = min(until_utc, cutoff) if until_utc is not None else min(now, cutoff)
+        pre_seconds_by_user = dict(
+            await voice_repo.total_time_by_user(since=since, until=pre_cutoff_until, now=now)
+        )
+
+        blended: dict[int, int] = {}
+        estimated: dict[int, bool] = {}
+        for user_id, voice_seconds in voice_seconds_by_user.items():
+            pre_seconds = pre_seconds_by_user.get(user_id, 0)
+            real_seconds = real_seconds_by_user.get(user_id, 0)
+            blended[user_id] = min(pre_seconds + real_seconds, voice_seconds)
+            estimated[user_id] = pre_seconds > 0
+        return blended, estimated
 
 
 class ActivitySessionRepository:

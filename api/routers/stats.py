@@ -84,8 +84,11 @@ async def engagement_leaderboard(
 ) -> list[EngagementOut]:
     """
     Per-user share of voice-channel time spent unmuted / undeafened (self-chosen state
-    only - see CONTEXT.md "Engagement"). Users with no voice time in the window are
-    excluded (nothing to divide by). Same visibility filter as `/stats/top-games`.
+    only - see CONTEXT.md "Engagement"). Voice time from before either dimension started
+    being tracked is assumed fully engaged (see `VoiceStateSessionRepository.engagement_by_user`) -
+    `*_estimated` flags which users' numbers include that assumption. Users with no
+    voice time in the window are excluded (nothing to divide by). Same visibility
+    filter as `/stats/top-games`.
     """
     voice_repo = VoiceSessionRepository(session)
     voice_state_repo = VoiceStateSessionRepository(session)
@@ -93,24 +96,24 @@ async def engagement_leaderboard(
 
     # Pin "now" once and pass it into every query below. Each repository's
     # total_time_by_user() otherwise samples its own `now` independently to clamp a
-    # still-open session - since these three awaits run one after another, a user
-    # currently connected *and* currently unmuted would get their unmuted duration
-    # clamped a few ms later than their voice duration, occasionally rounding up to
-    # one second more and pushing unmuted_percent just over 100%.
+    # still-open session - since these awaits run one after another, a user currently
+    # connected *and* currently unmuted would get their unmuted duration clamped a few
+    # ms later than their voice duration, occasionally rounding up to one second more
+    # and pushing unmuted_percent just over 100%.
     frozen_now = datetime.now(timezone.utc)
     voice_seconds_by_user = dict(
         await voice_repo.total_time_by_user(since=since, until=until, now=frozen_now)
     )
-    unmuted_by_user = dict(
-        await voice_state_repo.total_time_by_user(
-            "unmuted", since=since, until=until, now=frozen_now
+
+    engagement_by_kind = {
+        kind: await voice_state_repo.engagement_by_user(
+            voice_repo, kind, voice_seconds_by_user, since, until, frozen_now
         )
-    )
-    undeafened_by_user = dict(
-        await voice_state_repo.total_time_by_user(
-            "undeafened", since=since, until=until, now=frozen_now
-        )
-    )
+        for kind in ("unmuted", "undeafened")
+    }
+    unmuted_seconds_by_user, unmuted_estimated_by_user = engagement_by_kind["unmuted"]
+    undeafened_seconds_by_user, undeafened_estimated_by_user = engagement_by_kind["undeafened"]
+
     users_by_id = {
         user.id: user for user in await user_repo.get_all(role_ids=settings.visible_role_ids_list or None)
     }
@@ -119,8 +122,8 @@ async def engagement_leaderboard(
     for user_id, voice_seconds in voice_seconds_by_user.items():
         if voice_seconds <= 0 or user_id not in users_by_id:
             continue
-        unmuted_seconds = unmuted_by_user.get(user_id, 0)
-        undeafened_seconds = undeafened_by_user.get(user_id, 0)
+        unmuted_seconds = unmuted_seconds_by_user.get(user_id, 0)
+        undeafened_seconds = undeafened_seconds_by_user.get(user_id, 0)
         result.append(
             EngagementOut(
                 user_id=user_id,
@@ -130,6 +133,8 @@ async def engagement_leaderboard(
                 undeafened_seconds=undeafened_seconds,
                 unmuted_percent=round(unmuted_seconds / voice_seconds * 100, 1),
                 undeafened_percent=round(undeafened_seconds / voice_seconds * 100, 1),
+                unmuted_estimated=unmuted_estimated_by_user.get(user_id, False),
+                undeafened_estimated=undeafened_estimated_by_user.get(user_id, False),
             )
         )
     return sorted(result, key=lambda item: item.unmuted_percent, reverse=True)

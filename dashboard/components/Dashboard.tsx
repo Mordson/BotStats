@@ -155,6 +155,29 @@ export default function Dashboard({
   const selectedUserVoiceSeconds =
     voiceData.find((v) => v.user_id === selectedUserId)?.total_seconds ?? 0;
 
+  const engagementColumns: {
+    key: "unmuted" | "undeafened";
+    title: string;
+    percent: (e: EngagementOut) => number;
+    estimated: (e: EngagementOut) => boolean;
+    tooltip: string;
+  }[] = [
+    {
+      key: "unmuted",
+      title: "🎙️ Mikrofon (niewyciszony)",
+      percent: (e) => e.unmuted_percent,
+      estimated: (e) => e.unmuted_estimated,
+      tooltip: "Częściowo szacowane - brak danych o mikrofonie sprzed wdrożenia tej funkcji.",
+    },
+    {
+      key: "undeafened",
+      title: "🎧 Słuchawki (aktywne)",
+      percent: (e) => e.undeafened_percent,
+      estimated: (e) => e.undeafened_estimated,
+      tooltip: "Częściowo szacowane - brak danych o słuchawkach sprzed wdrożenia tej funkcji.",
+    },
+  ];
+
   return (
     <>
       <div id="banner" className={error ? "show" : undefined}>
@@ -404,32 +427,29 @@ export default function Dashboard({
                 Brak danych - żaden śledzony użytkownik nie miał jeszcze czasu na kanale głosowym.
               </div>
             ) : (
-              <div className="engagement-columns">
-                <div>
-                  <div className="games-list-title">🎙️ Mikrofon (niewyciszony)</div>
-                  <RankingList
-                    items={[...engagementData].sort((a, b) => b.unmuted_percent - a.unmuted_percent)}
-                    getLabel={(e) => e.display_name}
-                    getValue={(e) => e.unmuted_percent}
-                    getDisplayValue={(e) => `${e.unmuted_percent}%`}
-                    getColor={(e) => colorFor(e.display_name)}
-                    useAvatar
-                  />
+              <>
+                <div className="engagement-columns">
+                  {engagementColumns.map((col) => (
+                    <div key={col.key}>
+                      <div className="games-list-title">{col.title}</div>
+                      <RankingList
+                        items={[...engagementData].sort((a, b) => col.percent(b) - col.percent(a))}
+                        getLabel={(e) => e.display_name}
+                        getValue={col.percent}
+                        getDisplayValue={(e) => `${col.percent(e)}%${col.estimated(e) ? "*" : ""}`}
+                        getTooltip={(e) => (col.estimated(e) ? col.tooltip : undefined)}
+                        getColor={(e) => colorFor(e.display_name)}
+                        useAvatar
+                      />
+                    </div>
+                  ))}
                 </div>
-                <div>
-                  <div className="games-list-title">🎧 Słuchawki (nieogłuszone)</div>
-                  <RankingList
-                    items={[...engagementData].sort(
-                      (a, b) => b.undeafened_percent - a.undeafened_percent,
-                    )}
-                    getLabel={(e) => e.display_name}
-                    getValue={(e) => e.undeafened_percent}
-                    getDisplayValue={(e) => `${e.undeafened_percent}%`}
-                    getColor={(e) => colorFor(e.display_name)}
-                    useAvatar
-                  />
-                </div>
-              </div>
+                {engagementData.some((e) => e.unmuted_estimated || e.undeafened_estimated) && (
+                  <p className="engagement-legend">
+                    * częściowo szacowane - okres sprzed wdrożenia tej funkcji liczony jako 100%.
+                  </p>
+                )}
+              </>
             )}
           </section>
         </main>

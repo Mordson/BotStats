@@ -36,6 +36,8 @@ export interface EngagementOut {
   undeafened_seconds: number;
   unmuted_percent: number;
   undeafened_percent: number;
+  unmuted_estimated: boolean;
+  undeafened_estimated: boolean;
 }
 
 export class ApiError extends Error {

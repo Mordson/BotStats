@@ -66,6 +66,8 @@ class EngagementOut(BaseModel):
     undeafened_seconds: int
     unmuted_percent: float
     undeafened_percent: float
+    unmuted_estimated: bool
+    undeafened_estimated: bool
 
     @field_serializer("user_id")
     def serialize_user_id(self, value: int) -> str:

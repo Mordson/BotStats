@@ -504,6 +504,11 @@ footer {
   grid-template-columns: repeat(2, 1fr);
   gap: 28px;
 }
+.engagement-legend {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
 
 @media (max-width: 860px) {
   .cards {

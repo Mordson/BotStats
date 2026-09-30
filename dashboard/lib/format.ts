@@ -1,3 +1,4 @@
+// One color per possible Donut slice (see MAX_SLICES in donutSlices.ts, +1 for the single-leftover case).
 export const PALETTE = [
   "#00e5ff",
   "#8b5cff",
@@ -7,6 +8,11 @@ export const PALETTE = [
   "#4f8cff",
   "#ff6fae",
   "#b6ff3f",
+  "#ff7a3d",
+  "#3dffcf",
+  "#c77dff",
+  "#ffe14d",
+  "#ff4d4d",
 ];
 export const GRAY = "#4a5568";
 

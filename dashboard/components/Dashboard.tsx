@@ -26,7 +26,7 @@ interface DashboardProps {
   initialError: string | null;
 }
 
-const GAMES_LIMIT_OPTIONS = [5, 10, 15, 20, 30, 50];
+const GAMES_LIMIT_OPTIONS = [5, 10, 15, 20, 30, 40, 50];
 const CONNECTION_ERROR = "Nie można połączyć się z API. Upewnij się, że bot i API są uruchomione.";
 
 export default function Dashboard({

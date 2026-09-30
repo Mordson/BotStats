@@ -1,3 +1,4 @@
+import { splitDonutSlices } from "@/lib/donutSlices";
 import { fmtHours, GRAY } from "@/lib/format";
 
 interface DonutProps<T> {
@@ -18,8 +19,8 @@ export default function Donut<T>({
   periodLabel,
 }: DonutProps<T>) {
   const totalAll = items.reduce((s, item) => s + getValue(item), 0);
-  const donutSlices = items.slice(0, 8);
-  const otherSeconds = items.slice(8).reduce((s, item) => s + getValue(item), 0);
+  const { shownCount, otherTotal: otherSeconds } = splitDonutSlices(items.map(getValue));
+  const donutSlices = items.slice(0, shownCount);
 
   let acc = 0;
   const stops: string[] = [];

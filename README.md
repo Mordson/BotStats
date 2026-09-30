@@ -40,6 +40,7 @@ discord-activity-bot/
     │   └── RankingList.tsx       # leaderboard list paired with each Donut
     └── lib/
         ├── api.ts               # server-only fetch wrapper (talks to the FastAPI backend)
+        ├── donutSlices.ts        # which items get their own Donut slice vs. "Inne"
         └── format.ts             # time-range options, hour/minute formatting, color palette
 ```
 
@@ -55,6 +56,10 @@ list:
 A time-range picker (24h / week / month / half-year / year) filters all three tabs via the API's
 `since` param (see "API endpoints" below). The dashboard talks to the API only server-side -see
 "Running with Docker Compose" for the request-flow details.
+
+Each Donut always shows the top 8 items as their own slices. Past that, the next item gets its own
+slice (and legend row) while it makes up at least 20% of the remaining "Inne" (other) total, up to
+12 slices; if only one item would be left in "Inne", it is shown on its own instead.
 
 ### Design patterns
 
@@ -180,6 +185,13 @@ regardless of how pytest is invoked. Run a single test with e.g.:
 
 ```bash
 pytest tests/test_repositories.py::test_strips_trademark_symbols
+```
+
+Dashboard unit tests (Vitest) run from `dashboard/`:
+
+```bash
+cd dashboard
+npm test
 ```
 
 

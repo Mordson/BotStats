@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import RankingList from "./RankingList";
 import DonutRanking from "./DonutRanking";
 import PanelBody from "./PanelBody";
@@ -61,10 +61,15 @@ export default function Dashboard({
   const [userGamesLoading, setUserGamesLoading] = useState(false);
   const [rangeLoading, setRangeLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
+  // Incremented per loadRangeData call, so a slower response for an older range
+  // can't overwrite the data of the range picked after it.
+  const latestRangeRequest = useRef(0);
 
   const userGamesCacheKey = (userId: string, range: DateRange) => `${userId}:${rangeKey(range)}`;
 
   async function loadRangeData(range: DateRange) {
+    const requestId = ++latestRangeRequest.current;
+    const isStale = () => requestId !== latestRangeRequest.current;
     setRangeLoading(true);
     const query = rangeQuery(range);
     try {
@@ -75,13 +80,15 @@ export default function Dashboard({
         fetchJson<EngagementOut[]>(`/api/stats/engagement?${query}`),
         fetchJson<GenreTimeOut[]>(`/api/stats/top-genres?${query}`),
       ]);
+      if (isStale()) return;
       setRangeData({ voice, channels, games, engagement, genres });
       setError(null);
     } catch {
+      if (isStale()) return;
       setError(CONNECTION_ERROR);
       setRangeData(EMPTY_RANGE_DATA);
     } finally {
-      setRangeLoading(false);
+      if (!isStale()) setRangeLoading(false);
     }
   }
 

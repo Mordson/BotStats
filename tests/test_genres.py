@@ -73,5 +73,12 @@ def test_mapping_keys_are_normalized_lowercase_names():
         assert key == _normalize_activity_name(key).lower(), key
 
 
+def test_mapping_uses_only_the_agreed_genres():
+    # Catches typos - a misspelled genre would silently become a separate Donut slice.
+    assert set(GAME_GENRES.values()) == {
+        "MMO", "Strzelanki", "Survival", "Symulatory", "RPG", "MOBA", "Strategie"
+    }
+
+
 def test_no_game_is_both_mapped_and_ignored():
     assert not set(GAME_GENRES) & IGNORED_GAMES

@@ -88,33 +88,37 @@ class GenreTotal:
     top_games: list[tuple[str, int]] = field(default_factory=list)
 
 
-def aggregate_by_genre(
-    game_totals: list[tuple[str, int]], top_games_per_genre: int = 3
-) -> list[GenreTotal]:
+TOP_GAMES_PER_GENRE = 3
+
+
+def genre_of(name: str) -> str | None:
+    """The game's genre, `UNCLASSIFIED` if it isn't mapped, or None if it's ignored."""
+    key = name.lower()
+    if key in IGNORED_GAMES:
+        return None
+    return GAME_GENRES.get(key, UNCLASSIFIED)
+
+
+def aggregate_by_genre(game_totals: list[tuple[str, int]]) -> list[GenreTotal]:
     """
     Groups per-game totals (name, seconds) into genres, sorted by time descending.
 
     Ignored games are dropped; games missing from the mapping are grouped under
-    `UNCLASSIFIED`. Each genre keeps its `top_games_per_genre` most-played games.
+    `UNCLASSIFIED`. Each genre keeps its `TOP_GAMES_PER_GENRE` most-played games.
     """
     genres: dict[str, GenreTotal] = {}
     for name, seconds in sorted(game_totals, key=lambda row: row[1], reverse=True):
-        key = name.lower()
-        if key in IGNORED_GAMES or seconds <= 0:
+        genre = genre_of(name)
+        if genre is None:
             continue
-        genre = GAME_GENRES.get(key, UNCLASSIFIED)
         bucket = genres.setdefault(genre, GenreTotal(genre))
         bucket.total_seconds += seconds
-        if len(bucket.top_games) < top_games_per_genre:
+        if len(bucket.top_games) < TOP_GAMES_PER_GENRE:
             bucket.top_games.append((name, seconds))
     return sorted(genres.values(), key=lambda g: g.total_seconds, reverse=True)
 
 
 def unclassified_games(game_totals: list[tuple[str, int]]) -> list[tuple[str, int]]:
     """Games (name, seconds) that are neither mapped to a genre nor ignored, by time descending."""
-    unmapped = [
-        (name, seconds)
-        for name, seconds in game_totals
-        if name.lower() not in GAME_GENRES and name.lower() not in IGNORED_GAMES
-    ]
+    unmapped = [(name, seconds) for name, seconds in game_totals if genre_of(name) == UNCLASSIFIED]
     return sorted(unmapped, key=lambda row: row[1], reverse=True)

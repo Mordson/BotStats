@@ -370,7 +370,7 @@ export default function Dashboard({
               <div className="loading-state">Ładowanie…</div>
             ) : genresData.length === 0 ? (
               <div className="empty-state">
-                Brak danych - bot jeszcze nie zarejestrował żadnych gier w tym okresie.
+                Brak danych - w tym okresie nie zarejestrowano żadnych gier przypisanych do gatunków.
               </div>
             ) : (
               <>

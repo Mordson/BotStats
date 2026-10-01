@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps import get_db_session
 from api.schemas import ChannelTimeOut, EngagementOut, GameTimeOut, GenreTimeOut, VoiceTimeOut
 from config import settings
-from core.game_genres import aggregate_by_genre, unclassified_games
+from core import game_genres
 from core.repositories import (
     ActivitySessionRepository,
     UserRepository,
@@ -103,12 +103,12 @@ async def top_genres(
                 for name, seconds in genre.top_games
             ],
         )
-        for genre in aggregate_by_genre(rows)
+        for genre in game_genres.aggregate_by_genre(rows)
     ]
 
 
 @router.get("/unclassified-games", response_model=list[GameTimeOut])
-async def unclassified_games_list(
+async def unclassified_games(
     since: datetime | None = None,
     until: datetime | None = None,
     session: AsyncSession = Depends(get_db_session),
@@ -122,7 +122,7 @@ async def unclassified_games_list(
     rows = await repo.top_games(limit=None, since=since, until=until)
     return [
         GameTimeOut(activity_name=name, total_seconds=seconds)
-        for name, seconds in unclassified_games(rows)
+        for name, seconds in game_genres.unclassified_games(rows)
     ]
 
 

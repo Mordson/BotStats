@@ -10,7 +10,7 @@ Tables:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, JSON, String
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -27,7 +27,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(100))
     display_name: Mapped[str] = mapped_column(String(100))
     first_seen: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now()
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     # The user's current role IDs on the guild (refreshed on every member sync),
     # used to filter visibility in the dashboard's game sections.

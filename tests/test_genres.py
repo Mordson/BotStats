@@ -1,13 +1,13 @@
 from datetime import datetime, timedelta, timezone
 
 from core.game_genres import GAME_GENRES, IGNORED_GAMES
-from core.repositories import UserRepository, _normalize_activity_name
-from tests.factories import activity_session
+from core.repositories import _normalize_activity_name
+from tests.factories import activity_session, create_user
 
 
 async def _play(db_session, *games: tuple[str, int], activity_type: str = "playing") -> None:
     """Records one closed session of `seconds` per (activity_name, seconds) for user 1."""
-    await UserRepository(db_session).get_or_create(1, "alice", "Alice", [])
+    await create_user(db_session, user_id=1, display_name="Alice")
     now = datetime.now(timezone.utc) - timedelta(hours=1)
     for name, seconds in games:
         await activity_session(db_session, 1, name, now, seconds=seconds, activity_type=activity_type)

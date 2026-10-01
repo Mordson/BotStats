@@ -198,9 +198,13 @@ class _SessionRepository(Generic[_SessionT]):
         )
         return result.scalars().first()
 
-    async def close_session(self, session_obj: _SessionT, end_time: datetime) -> _SessionT:
+    @staticmethod
+    def _close(session_obj: _SessionT, end_time: datetime) -> None:
         session_obj.end_time = end_time
         session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
+
+    async def close_session(self, session_obj: _SessionT, end_time: datetime) -> _SessionT:
+        self._close(session_obj, end_time)
         await self.session.flush()
         return session_obj
 
@@ -208,8 +212,7 @@ class _SessionRepository(Generic[_SessionT]):
         """Closes all 'orphaned' sessions (e.g. after a bot restart)."""
         result = await self.session.execute(select(self.model).where(self.model.end_time.is_(None)))
         for session_obj in result.scalars().all():
-            session_obj.end_time = end_time
-            session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
+            self._close(session_obj, end_time)
         await self.session.flush()
 
     async def _overlap_totals(
@@ -292,6 +295,8 @@ class VoiceSessionRepository(_SessionRepository[VoiceSession]):
         Same overlap-window semantics as `total_time_by_user`. Rows are grouped by
         `channel_id` (not name) so a channel rename doesn't split its totals across
         two entries; the most recently seen name is used for display.
+
+        Doesn't go through `_overlap_totals`: it also needs each row's channel name.
         """
         now = datetime.now(timezone.utc)
         since_utc, until_utc = _utc_window(since, until)

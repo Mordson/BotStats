@@ -1,7 +1,8 @@
 """Builders for database rows used across the API/genre tests.
 
-Each `*_session` helper records one session through its repository, closing it
-after `seconds` (or leaving it open when `seconds` is None). Callers commit.
+`create_user` commits. Each `*_session` helper records one session through its
+repository, closing it after `seconds` (or leaving it open when `seconds` is None),
+and leaves committing to the caller.
 """
 
 from __future__ import annotations

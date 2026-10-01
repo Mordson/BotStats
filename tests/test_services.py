@@ -469,3 +469,18 @@ async def test_restart_reopens_voice_sessions_that_cleanup_closed(
     assert sessions[1].end_time is None
     open_states = [s for s in await _voice_state_sessions(db_session) if s.end_time is None]
     assert {s.kind for s in open_states} == {"unmuted", "undeafened"}
+
+
+async def test_sync_member_voice_deafened_opens_no_voice_state_sessions(
+    tracking_service: TrackingService, db_session
+):
+    # Discord forces self_mute on when deafening, mirror that here.
+    channel = make_voice_channel(id=100, name="General")
+    member = make_member(id=1, voice=make_voice_state(channel=channel, self_mute=True, self_deaf=True))
+
+    await tracking_service.sync_member_voice(member)
+    await db_session.commit()
+
+    result = await db_session.execute(select(VoiceSession))
+    assert len(result.scalars().all()) == 1
+    assert await _voice_state_sessions(db_session) == []

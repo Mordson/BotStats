@@ -66,6 +66,10 @@ async def on_ready() -> None:
     async with async_session() as session:
         service = TrackingService(session)
         for guild in bot.guilds:
+            # Same guild filter as the cogs - otherwise sessions would be opened
+            # in guilds whose live events are ignored, and never closed.
+            if settings.guild_id is not None and guild.id != settings.guild_id:
+                continue
             for member in guild.members:
                 if member.bot:
                     continue

@@ -13,13 +13,12 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
-from typing import Iterable, TypeVar
+from typing import Any, Generic, Iterable, TypeVar
 
 from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import ActivitySession, User, VoiceSession, VoiceStateSession
-
 
 
 # Games Discord sometimes reports under multiple, unrelated-looking names (e.g. a
@@ -52,10 +51,10 @@ def _aggregate_by_normalized_name(
     totals: dict[str, int] = {}
     canonical: dict[str, str] = {}
     for name, seconds in rows:
-        key = _normalize_activity_name(name).lower()
+        normalized = _normalize_activity_name(name)
+        key = normalized.lower()
         totals[key] = totals.get(key, 0) + (seconds or 0)
-        if key not in canonical:
-            canonical[key] = _normalize_activity_name(name)
+        canonical.setdefault(key, normalized)
     sorted_games = sorted(totals.items(), key=lambda x: x[1], reverse=True)
     if limit is not None:
         sorted_games = sorted_games[:limit]
@@ -81,6 +80,7 @@ def _duration_seconds(start: datetime, end: datetime) -> int:
 
 
 _K = TypeVar("_K")
+_SessionT = TypeVar("_SessionT", VoiceSession, ActivitySession, VoiceStateSession)
 
 
 def _window_conditions(
@@ -131,6 +131,16 @@ def _sum_overlap_seconds(
     return totals
 
 
+def _utc_window(
+    since: datetime | None, until: datetime | None
+) -> tuple[datetime | None, datetime | None]:
+    """`since`/`until` normalized to timezone-aware UTC (None stays None)."""
+    return (
+        _as_aware_utc(since) if since is not None else None,
+        _as_aware_utc(until) if until is not None else None,
+    )
+
+
 class UserRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -161,9 +171,78 @@ class UserRepository:
         return await self.session.get(User, user_id)
 
 
-class VoiceSessionRepository:
+class _SessionRepository(Generic[_SessionT]):
+    """
+    Shared plumbing for the three session tables (voice, activity, voice state):
+    each is a (start_time, end_time, duration_seconds) row per user that gets
+    opened, closed, bulk-closed after a restart, and summed over a time window.
+    """
+
+    model: type[_SessionT]
+
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    async def _add(self, **fields: Any) -> _SessionT:
+        session_obj = self.model(**fields)
+        self.session.add(session_obj)
+        await self.session.flush()
+        return session_obj
+
+    async def _first_open(self, *conditions: ColumnElement[bool]) -> _SessionT | None:
+        """The most recently started open (unfinished) session matching `conditions`."""
+        result = await self.session.execute(
+            select(self.model)
+            .where(*conditions, self.model.end_time.is_(None))
+            .order_by(self.model.start_time.desc())
+        )
+        return result.scalars().first()
+
+    async def close_session(self, session_obj: _SessionT, end_time: datetime) -> _SessionT:
+        session_obj.end_time = end_time
+        session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
+        await self.session.flush()
+        return session_obj
+
+    async def close_all_open(self, end_time: datetime) -> None:
+        """Closes all 'orphaned' sessions (e.g. after a bot restart)."""
+        result = await self.session.execute(select(self.model).where(self.model.end_time.is_(None)))
+        for session_obj in result.scalars().all():
+            session_obj.end_time = end_time
+            session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
+        await self.session.flush()
+
+    async def _overlap_totals(
+        self,
+        key_column: ColumnElement[_K],
+        *conditions: ColumnElement[bool],
+        since: datetime | None,
+        until: datetime | None,
+        now: datetime | None = None,
+        role_ids: list[int] | None = None,
+    ) -> dict[_K, int]:
+        """
+        Seconds per `key_column` value of the sessions matching `conditions`, counting
+        only the part of each session that overlaps [since, until] (see
+        `_sum_overlap_seconds`). A non-empty `role_ids` keeps only sessions of users
+        holding at least one of those roles. `now` defaults to the real current time.
+        """
+        now = now if now is not None else datetime.now(timezone.utc)
+        since_utc, until_utc = _utc_window(since, until)
+        query = select(key_column, self.model.start_time, self.model.end_time).where(
+            *conditions,
+            *_window_conditions(since_utc, until_utc, self.model.start_time, self.model.end_time),
+        )
+        if role_ids:
+            query = query.join(User, User.id == self.model.user_id).where(
+                User.role_ids.overlap(role_ids)
+            )
+        result = await self.session.execute(query)
+        return _sum_overlap_seconds(result.all(), since_utc, until_utc, now)
+
+
+class VoiceSessionRepository(_SessionRepository[VoiceSession]):
+    model = VoiceSession
 
     async def start_session(
         self,
@@ -173,42 +252,17 @@ class VoiceSessionRepository:
         channel_name: str,
         start_time: datetime,
     ) -> VoiceSession:
-        session_obj = VoiceSession(
+        return await self._add(
             user_id=user_id,
             guild_id=guild_id,
             channel_id=channel_id,
             channel_name=channel_name,
             start_time=start_time,
         )
-        self.session.add(session_obj)
-        await self.session.flush()
-        return session_obj
 
     async def get_open_session(self, user_id: int) -> VoiceSession | None:
         """Finds the user's currently open (unfinished) voice session."""
-        result = await self.session.execute(
-            select(VoiceSession)
-            .where(VoiceSession.user_id == user_id, VoiceSession.end_time.is_(None))
-            .order_by(VoiceSession.start_time.desc())
-        )
-        return result.scalars().first()
-
-    async def close_session(self, session_obj: VoiceSession, end_time: datetime) -> VoiceSession:
-        session_obj.end_time = end_time
-        session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
-        await self.session.flush()
-        return session_obj
-
-    async def close_all_open(self, end_time: datetime) -> None:
-        """Closes all 'orphaned' sessions (e.g. after a bot restart)."""
-        result = await self.session.execute(
-            select(VoiceSession).where(VoiceSession.end_time.is_(None))
-        )
-        for session_obj in result.scalars().all():
-            session_obj.end_time = end_time
-            session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
-        await self.session.flush()
-
+        return await self._first_open(VoiceSession.user_id == user_id)
 
     async def total_time_by_user(
         self,
@@ -226,16 +280,7 @@ class VoiceSessionRepository:
         combining totals from several repositories in one request so they all
         clamp open sessions to the same instant instead of drifting apart.
         """
-        now = now if now is not None else datetime.now(timezone.utc)
-        since_utc = _as_aware_utc(since) if since is not None else None
-        until_utc = _as_aware_utc(until) if until is not None else None
-        conditions = _window_conditions(
-            since_utc, until_utc, VoiceSession.start_time, VoiceSession.end_time
-        )
-        result = await self.session.execute(
-            select(VoiceSession.user_id, VoiceSession.start_time, VoiceSession.end_time).where(*conditions)
-        )
-        totals = _sum_overlap_seconds(result.all(), since_utc, until_utc, now)
+        totals = await self._overlap_totals(VoiceSession.user_id, since=since, until=until, now=now)
         return list(totals.items())
 
     async def total_time_by_channel(
@@ -249,8 +294,7 @@ class VoiceSessionRepository:
         two entries; the most recently seen name is used for display.
         """
         now = datetime.now(timezone.utc)
-        since_utc = _as_aware_utc(since) if since is not None else None
-        until_utc = _as_aware_utc(until) if until is not None else None
+        since_utc, until_utc = _utc_window(since, until)
         conditions = _window_conditions(
             since_utc, until_utc, VoiceSession.start_time, VoiceSession.end_time
         )
@@ -278,9 +322,8 @@ class VoiceSessionRepository:
         return [(channel_id, names[channel_id], total) for channel_id, total in totals.items()]
 
 
-class VoiceStateSessionRepository:
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
+class VoiceStateSessionRepository(_SessionRepository[VoiceStateSession]):
+    model = VoiceStateSession
 
     async def start_session(
         self,
@@ -289,12 +332,7 @@ class VoiceStateSessionRepository:
         kind: str,
         start_time: datetime,
     ) -> VoiceStateSession:
-        session_obj = VoiceStateSession(
-            user_id=user_id, guild_id=guild_id, kind=kind, start_time=start_time
-        )
-        self.session.add(session_obj)
-        await self.session.flush()
-        return session_obj
+        return await self._add(user_id=user_id, guild_id=guild_id, kind=kind, start_time=start_time)
 
     async def earliest_start_time(self, kind: str) -> datetime | None:
         """
@@ -312,32 +350,9 @@ class VoiceStateSessionRepository:
 
     async def get_open_session(self, user_id: int, kind: str) -> VoiceStateSession | None:
         """Finds the user's currently open (unfinished) session of the given kind."""
-        result = await self.session.execute(
-            select(VoiceStateSession).where(
-                VoiceStateSession.user_id == user_id,
-                VoiceStateSession.kind == kind,
-                VoiceStateSession.end_time.is_(None),
-            )
+        return await self._first_open(
+            VoiceStateSession.user_id == user_id, VoiceStateSession.kind == kind
         )
-        return result.scalars().first()
-
-    async def close_session(
-        self, session_obj: VoiceStateSession, end_time: datetime
-    ) -> VoiceStateSession:
-        session_obj.end_time = end_time
-        session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
-        await self.session.flush()
-        return session_obj
-
-    async def close_all_open(self, end_time: datetime) -> None:
-        """Closes all 'orphaned' sessions (e.g. after a bot restart)."""
-        result = await self.session.execute(
-            select(VoiceStateSession).where(VoiceStateSession.end_time.is_(None))
-        )
-        for session_obj in result.scalars().all():
-            session_obj.end_time = end_time
-            session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
-        await self.session.flush()
 
     async def total_time_by_user(
         self,
@@ -352,19 +367,13 @@ class VoiceStateSessionRepository:
         Same overlap-window (and shared-`now`) semantics as
         `VoiceSessionRepository.total_time_by_user`.
         """
-        now = now if now is not None else datetime.now(timezone.utc)
-        since_utc = _as_aware_utc(since) if since is not None else None
-        until_utc = _as_aware_utc(until) if until is not None else None
-        conditions = [VoiceStateSession.kind == kind]
-        conditions += _window_conditions(
-            since_utc, until_utc, VoiceStateSession.start_time, VoiceStateSession.end_time
+        totals = await self._overlap_totals(
+            VoiceStateSession.user_id,
+            VoiceStateSession.kind == kind,
+            since=since,
+            until=until,
+            now=now,
         )
-        result = await self.session.execute(
-            select(
-                VoiceStateSession.user_id, VoiceStateSession.start_time, VoiceStateSession.end_time
-            ).where(*conditions)
-        )
-        totals = _sum_overlap_seconds(result.all(), since_utc, until_utc, now)
         return list(totals.items())
 
     async def engagement_by_user(
@@ -412,9 +421,8 @@ class VoiceStateSessionRepository:
         return blended, estimated
 
 
-class ActivitySessionRepository:
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
+class ActivitySessionRepository(_SessionRepository[ActivitySession]):
+    model = ActivitySession
 
     async def start_session(
         self,
@@ -424,16 +432,13 @@ class ActivitySessionRepository:
         activity_type: str,
         start_time: datetime,
     ) -> ActivitySession:
-        session_obj = ActivitySession(
+        return await self._add(
             user_id=user_id,
             guild_id=guild_id,
             activity_name=activity_name,
             activity_type=activity_type,
             start_time=start_time,
         )
-        self.session.add(session_obj)
-        await self.session.flush()
-        return session_obj
 
     async def get_open_session(self, user_id: int, activity_name: str) -> ActivitySession | None:
         """
@@ -442,29 +447,9 @@ class ActivitySessionRepository:
         A user can have several open sessions at once (e.g. playing a game +
         listening to Spotify), so we match by activity name.
         """
-        result = await self.session.execute(
-            select(ActivitySession).where(
-                ActivitySession.user_id == user_id,
-                ActivitySession.activity_name == activity_name,
-                ActivitySession.end_time.is_(None),
-            )
+        return await self._first_open(
+            ActivitySession.user_id == user_id, ActivitySession.activity_name == activity_name
         )
-        return result.scalars().first()
-
-    async def close_session(self, session_obj: ActivitySession, end_time: datetime) -> ActivitySession:
-        session_obj.end_time = end_time
-        session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
-        await self.session.flush()
-        return session_obj
-
-    async def close_all_open(self, end_time: datetime) -> None:
-        result = await self.session.execute(
-            select(ActivitySession).where(ActivitySession.end_time.is_(None))
-        )
-        for session_obj in result.scalars().all():
-            session_obj.end_time = end_time
-            session_obj.duration_seconds = _duration_seconds(session_obj.start_time, end_time)
-        await self.session.flush()
 
     async def top_games(
         self,
@@ -479,22 +464,13 @@ class ActivitySessionRepository:
 
         Same overlap-window semantics as `VoiceSessionRepository.total_time_by_user`.
         """
-        now = datetime.now(timezone.utc)
-        since_utc = _as_aware_utc(since) if since is not None else None
-        until_utc = _as_aware_utc(until) if until is not None else None
-        conditions = [ActivitySession.activity_type == "playing"]
-        conditions += _window_conditions(
-            since_utc, until_utc, ActivitySession.start_time, ActivitySession.end_time
+        totals = await self._overlap_totals(
+            ActivitySession.activity_name,
+            ActivitySession.activity_type == "playing",
+            since=since,
+            until=until,
+            role_ids=role_ids,
         )
-        query = select(
-            ActivitySession.activity_name, ActivitySession.start_time, ActivitySession.end_time
-        ).where(*conditions)
-        if role_ids:
-            query = query.join(User, User.id == ActivitySession.user_id).where(
-                User.role_ids.overlap(role_ids)
-            )
-        result = await self.session.execute(query)
-        totals = _sum_overlap_seconds(result.all(), since_utc, until_utc, now)
         return _aggregate_by_normalized_name(list(totals.items()), limit)
 
     async def total_game_time_by_user(
@@ -504,20 +480,11 @@ class ActivitySessionRepository:
 
         Same overlap-window semantics as `VoiceSessionRepository.total_time_by_user`.
         """
-        now = datetime.now(timezone.utc)
-        since_utc = _as_aware_utc(since) if since is not None else None
-        until_utc = _as_aware_utc(until) if until is not None else None
-        conditions = [
+        totals = await self._overlap_totals(
+            ActivitySession.activity_name,
             ActivitySession.user_id == user_id,
             ActivitySession.activity_type == "playing",
-        ]
-        conditions += _window_conditions(
-            since_utc, until_utc, ActivitySession.start_time, ActivitySession.end_time
+            since=since,
+            until=until,
         )
-        result = await self.session.execute(
-            select(
-                ActivitySession.activity_name, ActivitySession.start_time, ActivitySession.end_time
-            ).where(*conditions)
-        )
-        totals = _sum_overlap_seconds(result.all(), since_utc, until_utc, now)
         return _aggregate_by_normalized_name(list(totals.items()))

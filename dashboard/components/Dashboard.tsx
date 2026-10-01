@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import RankingList from "./RankingList";
-import Donut from "./Donut";
+import DonutRanking from "./DonutRanking";
+import PanelBody from "./PanelBody";
 import TimeRangePicker from "./TimeRangePicker";
-import { colorFor, fmtHours, formatRangeLabel, rangeKey, rangeToParams, type DateRange } from "@/lib/format";
+import { colorFor, fmtHours, formatRangeLabel, rangeKey, rangeQuery, type DateRange } from "@/lib/format";
 import type {
   ChannelTimeOut,
   EngagementOut,
@@ -14,40 +15,43 @@ import type {
   UserOut,
   VoiceTimeOut,
 } from "@/lib/api";
+import { ALL_GAMES_LIMIT, EMPTY_RANGE_DATA, type RangeData } from "@/lib/rangeData";
 
 type Tab = "voice" | "games" | "genres" | "user" | "engagement";
 
 interface DashboardProps {
   initialDateRange: DateRange;
-  initialVoiceData: VoiceTimeOut[];
-  initialChannelsData: ChannelTimeOut[];
-  initialGamesData: GameTimeOut[];
-  initialEngagementData: EngagementOut[];
-  initialGenresData: GenreTimeOut[];
+  initialRangeData: RangeData;
   initialUsers: UserOut[];
   initialError: string | null;
 }
 
+const TABS: { id: Tab; label: string }[] = [
+  { id: "voice", label: "🔊 Czas głosowy" },
+  { id: "games", label: "🕹️ Top gry" },
+  { id: "genres", label: "🏷️ Gatunki" },
+  { id: "user", label: "👤 Użytkownik" },
+  { id: "engagement", label: "🎙️ Zaangażowanie" },
+];
+
 const GAMES_LIMIT_OPTIONS = [5, 10, 15, 20, 30, 40, 50];
 const CONNECTION_ERROR = "Nie można połączyć się z API. Upewnij się, że bot i API są uruchomione.";
 
+async function fetchJson<T>(url: string): Promise<T> {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json() as Promise<T>;
+}
+
 export default function Dashboard({
   initialDateRange,
-  initialVoiceData,
-  initialChannelsData,
-  initialGamesData,
-  initialEngagementData,
-  initialGenresData,
+  initialRangeData,
   initialUsers,
   initialError,
 }: DashboardProps) {
   const [dateRange, setDateRange] = useState<DateRange>(initialDateRange);
   const [activeTab, setActiveTab] = useState<Tab>("voice");
-  const [voiceData, setVoiceData] = useState(initialVoiceData);
-  const [channelsData, setChannelsData] = useState(initialChannelsData);
-  const [gamesData, setGamesData] = useState(initialGamesData);
-  const [engagementData, setEngagementData] = useState(initialEngagementData);
-  const [genresData, setGenresData] = useState(initialGenresData);
+  const [rangeData, setRangeData] = useState<RangeData>(initialRangeData);
   const [users, setUsers] = useState(initialUsers);
   const [gamesLimit, setGamesLimit] = useState(10);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(
@@ -62,32 +66,20 @@ export default function Dashboard({
 
   async function loadRangeData(range: DateRange) {
     setRangeLoading(true);
-    const params = new URLSearchParams(rangeToParams(range) as Record<string, string>);
-    const gamesParams = new URLSearchParams({ ...rangeToParams(range), limit: "1000" } as Record<string, string>);
+    const query = rangeQuery(range);
     try {
-      const [voiceResp, channelsResp, gamesResp, engagementResp, genresResp] = await Promise.all([
-        fetch(`/api/stats/voice-time?${params}`),
-        fetch(`/api/stats/voice-channels?${params}`),
-        fetch(`/api/stats/top-games?${gamesParams}`),
-        fetch(`/api/stats/engagement?${params}`),
-        fetch(`/api/stats/top-genres?${params}`),
+      const [voice, channels, games, engagement, genres] = await Promise.all([
+        fetchJson<VoiceTimeOut[]>(`/api/stats/voice-time?${query}`),
+        fetchJson<ChannelTimeOut[]>(`/api/stats/voice-channels?${query}`),
+        fetchJson<GameTimeOut[]>(`/api/stats/top-games?${rangeQuery(range, { limit: ALL_GAMES_LIMIT })}`),
+        fetchJson<EngagementOut[]>(`/api/stats/engagement?${query}`),
+        fetchJson<GenreTimeOut[]>(`/api/stats/top-genres?${query}`),
       ]);
-      if (!voiceResp.ok || !channelsResp.ok || !gamesResp.ok || !engagementResp.ok || !genresResp.ok) {
-        throw new Error("http");
-      }
-      setVoiceData(await voiceResp.json());
-      setChannelsData(await channelsResp.json());
-      setGamesData(await gamesResp.json());
-      setEngagementData(await engagementResp.json());
-      setGenresData(await genresResp.json());
+      setRangeData({ voice, channels, games, engagement, genres });
       setError(null);
     } catch {
       setError(CONNECTION_ERROR);
-      setVoiceData([]);
-      setChannelsData([]);
-      setGamesData([]);
-      setEngagementData([]);
-      setGenresData([]);
+      setRangeData(EMPTY_RANGE_DATA);
     } finally {
       setRangeLoading(false);
     }
@@ -95,9 +87,7 @@ export default function Dashboard({
 
   async function loadUsers() {
     try {
-      const resp = await fetch("/api/users/");
-      if (!resp.ok) throw new Error("http");
-      const data: UserOut[] = await resp.json();
+      const data = await fetchJson<UserOut[]>("/api/users/");
       setUsers(data);
       setError(null);
       setSelectedUserId((current) => current ?? data[0]?.id ?? null);
@@ -110,10 +100,7 @@ export default function Dashboard({
   async function loadUserGames(userId: string, range: DateRange) {
     setUserGamesLoading(true);
     try {
-      const params = new URLSearchParams(rangeToParams(range) as Record<string, string>);
-      const resp = await fetch(`/api/users/${userId}/games?${params}`);
-      if (!resp.ok) throw new Error("http");
-      const data: UserGameTimeOut[] = await resp.json();
+      const data = await fetchJson<UserGameTimeOut[]>(`/api/users/${userId}/games?${rangeQuery(range)}`);
       setUserGamesCache((prev) => ({ ...prev, [userGamesCacheKey(userId, range)]: data }));
       setError(null);
     } catch {
@@ -148,21 +135,35 @@ export default function Dashboard({
     if (activeTab === "user" && selectedUserId) void loadUserGames(selectedUserId, dateRange);
   }
 
-  const voiceTotal = voiceData.reduce((sum, u) => sum + u.total_seconds, 0);
-  const activePlayers = voiceData.filter((u) => u.total_seconds > 0).length;
-  const topGame = gamesData[0]?.activity_name ?? "–";
-  const trackedGames = gamesData.length;
-  const topChannel = channelsData[0]?.channel_name ?? "–";
-  const gamesTotal = gamesData.reduce((sum, g) => sum + g.total_seconds, 0);
+  const { voice: voiceData, channels: channelsData, games: gamesData, engagement: engagementData, genres: genresData } =
+    rangeData;
   const periodLabel = formatRangeLabel(dateRange);
 
-  const shownGames = gamesData.slice(0, gamesLimit);
+  const cards: { label: string; value: string }[] = [
+    { label: "Czas głosowy", value: fmtHours(voiceData.reduce((sum, u) => sum + u.total_seconds, 0)) },
+    { label: "Łączny czas na grach", value: fmtHours(gamesData.reduce((sum, g) => sum + g.total_seconds, 0)) },
+    { label: "Najpopularniejsza gra", value: gamesData[0]?.activity_name ?? "–" },
+    {
+      label: "Aktywni gracze",
+      value: voiceData.filter((u) => u.total_seconds > 0).length.toLocaleString("pl-PL"),
+    },
+    { label: "Śledzone gry", value: gamesData.length.toLocaleString("pl-PL") },
+    { label: "Najczęściej odwiedzany kanał", value: channelsData[0]?.channel_name ?? "–" },
+  ];
+
+  // Already sorted by play time, descending, by the API.
   const selectedUserGames = selectedUserId
     ? userGamesCache[userGamesCacheKey(selectedUserId, dateRange)]
     : undefined;
-  const selectedUser = users.find((u) => u.id === selectedUserId);
+  const selectedUserName = users.find((u) => u.id === selectedUserId)?.display_name ?? "Użytkownik";
   const selectedUserVoiceSeconds =
     voiceData.find((v) => v.user_id === selectedUserId)?.total_seconds ?? 0;
+  const selectedUserVoiceStat = (
+    <div className="user-voice-stat">
+      <span className="user-voice-stat-label">🔊 Czas na kanałach głosowych</span>
+      <span className="user-voice-stat-value">{fmtHours(selectedUserVoiceSeconds)}</span>
+    </div>
+  );
 
   const engagementColumns: {
     key: "unmuted" | "undeafened";
@@ -214,75 +215,26 @@ export default function Dashboard({
         </header>
 
         <section className="cards">
-          <div className="card">
-            <div className="card-label">Czas głosowy</div>
-            <div className={`card-value${rangeLoading ? " skeleton" : ""}`}>
-              {rangeLoading ? "–" : fmtHours(voiceTotal)}
+          {cards.map((card) => (
+            <div className="card" key={card.label}>
+              <div className="card-label">{card.label}</div>
+              <div className={`card-value${rangeLoading ? " skeleton" : ""}`}>
+                {rangeLoading ? "–" : card.value}
+              </div>
             </div>
-          </div>
-          <div className="card">
-            <div className="card-label">Łączny czas na grach</div>
-            <div className={`card-value${rangeLoading ? " skeleton" : ""}`}>
-              {rangeLoading ? "–" : fmtHours(gamesTotal)}
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-label">Najpopularniejsza gra</div>
-            <div className={`card-value${rangeLoading ? " skeleton" : ""}`}>
-              {rangeLoading ? "–" : topGame}
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-label">Aktywni gracze</div>
-            <div className={`card-value${rangeLoading ? " skeleton" : ""}`}>
-              {rangeLoading ? "–" : activePlayers.toLocaleString("pl-PL")}
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-label">Śledzone gry</div>
-            <div className={`card-value${rangeLoading ? " skeleton" : ""}`}>
-              {rangeLoading ? "–" : trackedGames.toLocaleString("pl-PL")}
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-label">Najczęściej odwiedzany kanał</div>
-            <div className={`card-value${rangeLoading ? " skeleton" : ""}`}>
-              {rangeLoading ? "–" : topChannel}
-            </div>
-          </div>
+          ))}
         </section>
 
         <nav className="tabs">
-          <button
-            className={`tab${activeTab === "voice" ? " active" : ""}`}
-            onClick={() => handleTabChange("voice")}
-          >
-            🔊 Czas głosowy
-          </button>
-          <button
-            className={`tab${activeTab === "games" ? " active" : ""}`}
-            onClick={() => handleTabChange("games")}
-          >
-            🕹️ Top gry
-          </button>
-          <button
-            className={`tab${activeTab === "genres" ? " active" : ""}`}
-            onClick={() => handleTabChange("genres")}
-          >
-            🏷️ Gatunki
-          </button>
-          <button
-            className={`tab${activeTab === "user" ? " active" : ""}`}
-            onClick={() => handleTabChange("user")}
-          >
-            👤 Użytkownik
-          </button>
-          <button
-            className={`tab${activeTab === "engagement" ? " active" : ""}`}
-            onClick={() => handleTabChange("engagement")}
-          >
-            🎙️ Zaangażowanie
-          </button>
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              className={`tab${activeTab === tab.id ? " active" : ""}`}
+              onClick={() => handleTabChange(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
         </nav>
 
         <main>
@@ -290,32 +242,21 @@ export default function Dashboard({
             <div className="panel-head">
               <h2>Ranking - czas na kanałach głosowych</h2>
             </div>
-            {rangeLoading ? (
-              <div className="loading-state">Ładowanie…</div>
-            ) : voiceData.length === 0 ? (
-              <div className="empty-state">
-                Brak danych - bot jeszcze nie zarejestrował żadnych sesji głosowych.
-              </div>
-            ) : (
-              <>
-                <Donut
-                  items={voiceData}
-                  getLabel={(u) => u.display_name}
-                  getValue={(u) => u.total_seconds}
-                  getColor={(u, i) => colorFor(u.display_name, i)}
-                  centerLabel="łącznie"
-                  periodLabel={periodLabel}
-                />
-                <div className="games-list-title">Ranking użytkowników</div>
-                <RankingList
-                  items={voiceData}
-                  getLabel={(u) => u.display_name}
-                  getValue={(u) => u.total_seconds}
-                  getColor={(u, i) => colorFor(u.display_name, i)}
-                  useAvatar
-                />
-              </>
-            )}
+            <PanelBody
+              loading={rangeLoading}
+              isEmpty={voiceData.length === 0}
+              emptyText="Brak danych - bot jeszcze nie zarejestrował żadnych sesji głosowych."
+            >
+              <DonutRanking
+                items={voiceData}
+                rankingTitle="Ranking użytkowników"
+                periodLabel={periodLabel}
+                getLabel={(u) => u.display_name}
+                getValue={(u) => u.total_seconds}
+                getColor={(u, i) => colorFor(u.display_name, i)}
+                useAvatar
+              />
+            </PanelBody>
           </section>
 
           <section className="panel" hidden={activeTab !== "games"}>
@@ -335,63 +276,42 @@ export default function Dashboard({
                 </select>
               </div>
             </div>
-            {rangeLoading ? (
-              <div className="loading-state">Ładowanie…</div>
-            ) : gamesData.length === 0 ? (
-              <div className="empty-state">
-                Brak danych - bot jeszcze nie zarejestrował żadnych aktywności.
-              </div>
-            ) : (
-              <>
-                <Donut
-                  items={gamesData}
-                  getLabel={(g) => g.activity_name}
-                  getValue={(g) => g.total_seconds}
-                  getColor={(g, i) => colorFor(g.activity_name, i)}
-                  centerLabel="łącznie"
-                  periodLabel={periodLabel}
-                />
-                <div className="games-list-title">Ranking gier</div>
-                <RankingList
-                  items={shownGames}
-                  getLabel={(g) => g.activity_name}
-                  getValue={(g) => g.total_seconds}
-                  getColor={(g, i) => colorFor(g.activity_name, i)}
-                />
-              </>
-            )}
+            <PanelBody
+              loading={rangeLoading}
+              isEmpty={gamesData.length === 0}
+              emptyText="Brak danych - bot jeszcze nie zarejestrował żadnych aktywności."
+            >
+              <DonutRanking
+                items={gamesData}
+                rankingItems={gamesData.slice(0, gamesLimit)}
+                rankingTitle="Ranking gier"
+                periodLabel={periodLabel}
+                getLabel={(g) => g.activity_name}
+                getValue={(g) => g.total_seconds}
+                getColor={(g, i) => colorFor(g.activity_name, i)}
+              />
+            </PanelBody>
           </section>
 
           <section className="panel" hidden={activeTab !== "genres"}>
             <div className="panel-head">
               <h2>Gatunki gier - łączny czas wszystkich użytkowników</h2>
             </div>
-            {rangeLoading ? (
-              <div className="loading-state">Ładowanie…</div>
-            ) : genresData.length === 0 ? (
-              <div className="empty-state">
-                Brak danych - w tym okresie nie zarejestrowano żadnych gier przypisanych do gatunków.
-              </div>
-            ) : (
-              <>
-                <Donut
-                  items={genresData}
-                  getLabel={(g) => g.genre}
-                  getValue={(g) => g.total_seconds}
-                  getColor={(g, i) => colorFor(g.genre, i)}
-                  centerLabel="łącznie"
-                  periodLabel={periodLabel}
-                />
-                <div className="games-list-title">Ranking gatunków</div>
-                <RankingList
-                  items={genresData}
-                  getLabel={(g) => g.genre}
-                  getValue={(g) => g.total_seconds}
-                  getColor={(g, i) => colorFor(g.genre, i)}
-                  getSubtitle={(g) => g.top_games.map((game) => game.activity_name).join(", ")}
-                />
-              </>
-            )}
+            <PanelBody
+              loading={rangeLoading}
+              isEmpty={genresData.length === 0}
+              emptyText="Brak danych - w tym okresie nie zarejestrowano żadnych gier przypisanych do gatunków."
+            >
+              <DonutRanking
+                items={genresData}
+                rankingTitle="Ranking gatunków"
+                periodLabel={periodLabel}
+                getLabel={(g) => g.genre}
+                getValue={(g) => g.total_seconds}
+                getColor={(g, i) => colorFor(g.genre, i)}
+                getSubtitle={(g) => g.top_games.map((game) => game.activity_name).join(", ")}
+              />
+            </PanelBody>
           </section>
 
           <section className="panel" hidden={activeTab !== "user"}>
@@ -418,48 +338,29 @@ export default function Dashboard({
             </div>
             {users.length === 0 ? (
               <div className="empty-state">Brak użytkowników w bazie.</div>
-            ) : userGamesLoading || selectedUserGames === undefined ? (
-              <div className="loading-state">Ładowanie…</div>
-            ) : selectedUserGames.length === 0 ? (
-              selectedUserVoiceSeconds > 0 ? (
-                <>
-                  <div className="user-voice-stat">
-                    <span className="user-voice-stat-label">🔊 Czas na kanałach głosowych</span>
-                    <span className="user-voice-stat-value">{fmtHours(selectedUserVoiceSeconds)}</span>
-                  </div>
-                  <div className="empty-state">
-                    {selectedUser ? selectedUser.display_name : "Użytkownik"} był aktywny na
-                    kanałach głosowych, ale nie ma jeszcze żadnych zarejestrowanych gier.
-                  </div>
-                </>
-              ) : (
-                <div className="empty-state">
-                  {selectedUser ? selectedUser.display_name : "Użytkownik"} nie ma jeszcze
-                  żadnych zarejestrowanych aktywności.
-                </div>
-              )
             ) : (
-              <>
-                <div className="user-voice-stat">
-                  <span className="user-voice-stat-label">🔊 Czas na kanałach głosowych</span>
-                  <span className="user-voice-stat-value">{fmtHours(selectedUserVoiceSeconds)}</span>
-                </div>
-                <Donut
-                  items={[...selectedUserGames].sort((a, b) => b.total_seconds - a.total_seconds)}
-                  getLabel={(g) => g.activity_name}
-                  getValue={(g) => g.total_seconds}
-                  getColor={(g, i) => colorFor(g.activity_name, i)}
-                  centerLabel="łącznie"
-                  periodLabel={periodLabel}
-                />
-                <div className="games-list-title">Ranking gier</div>
-                <RankingList
-                  items={[...selectedUserGames].sort((a, b) => b.total_seconds - a.total_seconds)}
-                  getLabel={(g) => g.activity_name}
-                  getValue={(g) => g.total_seconds}
-                  getColor={(g, i) => colorFor(g.activity_name, i)}
-                />
-              </>
+              <PanelBody
+                loading={userGamesLoading || selectedUserGames === undefined}
+                isEmpty={selectedUserGames?.length === 0 && selectedUserVoiceSeconds === 0}
+                emptyText={`${selectedUserName} nie ma jeszcze żadnych zarejestrowanych aktywności.`}
+              >
+                {selectedUserVoiceStat}
+                {selectedUserGames?.length === 0 ? (
+                  <div className="empty-state">
+                    {selectedUserName} był aktywny na kanałach głosowych, ale nie ma jeszcze żadnych
+                    zarejestrowanych gier.
+                  </div>
+                ) : (
+                  <DonutRanking
+                    items={selectedUserGames ?? []}
+                    rankingTitle="Ranking gier"
+                    periodLabel={periodLabel}
+                    getLabel={(g) => g.activity_name}
+                    getValue={(g) => g.total_seconds}
+                    getColor={(g, i) => colorFor(g.activity_name, i)}
+                  />
+                )}
+              </PanelBody>
             )}
           </section>
 
@@ -467,37 +368,33 @@ export default function Dashboard({
             <div className="panel-head">
               <h2>Zaangażowanie - % czasu głosowego z mikrofonem/słuchawkami włączonymi</h2>
             </div>
-            {rangeLoading ? (
-              <div className="loading-state">Ładowanie…</div>
-            ) : engagementData.length === 0 ? (
-              <div className="empty-state">
-                Brak danych - żaden śledzony użytkownik nie miał jeszcze czasu na kanale głosowym.
+            <PanelBody
+              loading={rangeLoading}
+              isEmpty={engagementData.length === 0}
+              emptyText="Brak danych - żaden śledzony użytkownik nie miał jeszcze czasu na kanale głosowym."
+            >
+              <div className="engagement-columns">
+                {engagementColumns.map((col) => (
+                  <div key={col.key}>
+                    <div className="games-list-title">{col.title}</div>
+                    <RankingList
+                      items={[...engagementData].sort((a, b) => col.percent(b) - col.percent(a))}
+                      getLabel={(e) => e.display_name}
+                      getValue={col.percent}
+                      getDisplayValue={(e) => `${col.percent(e)}%${col.estimated(e) ? "*" : ""}`}
+                      getTooltip={(e) => (col.estimated(e) ? col.tooltip : undefined)}
+                      getColor={(e) => colorFor(e.display_name)}
+                      useAvatar
+                    />
+                  </div>
+                ))}
               </div>
-            ) : (
-              <>
-                <div className="engagement-columns">
-                  {engagementColumns.map((col) => (
-                    <div key={col.key}>
-                      <div className="games-list-title">{col.title}</div>
-                      <RankingList
-                        items={[...engagementData].sort((a, b) => col.percent(b) - col.percent(a))}
-                        getLabel={(e) => e.display_name}
-                        getValue={col.percent}
-                        getDisplayValue={(e) => `${col.percent(e)}%${col.estimated(e) ? "*" : ""}`}
-                        getTooltip={(e) => (col.estimated(e) ? col.tooltip : undefined)}
-                        getColor={(e) => colorFor(e.display_name)}
-                        useAvatar
-                      />
-                    </div>
-                  ))}
-                </div>
-                {engagementData.some((e) => e.unmuted_estimated || e.undeafened_estimated) && (
-                  <p className="engagement-legend">
-                    * częściowo szacowane - okres sprzed wdrożenia tej funkcji liczony jako 100%.
-                  </p>
-                )}
-              </>
-            )}
+              {engagementData.some((e) => e.unmuted_estimated || e.undeafened_estimated) && (
+                <p className="engagement-legend">
+                  * częściowo szacowane - okres sprzed wdrożenia tej funkcji liczony jako 100%.
+                </p>
+              )}
+            </PanelBody>
           </section>
         </main>
       </div>

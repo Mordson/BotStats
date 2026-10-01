@@ -15,6 +15,7 @@ import type {
   UserOut,
   VoiceTimeOut,
 } from "@/lib/api";
+import { createLatestRequestTracker } from "@/lib/latestRequest";
 import { ALL_GAMES_LIMIT, EMPTY_RANGE_DATA, type RangeData } from "@/lib/rangeData";
 
 type Tab = "voice" | "games" | "genres" | "user" | "engagement";
@@ -61,15 +62,13 @@ export default function Dashboard({
   const [userGamesLoading, setUserGamesLoading] = useState(false);
   const [rangeLoading, setRangeLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
-  // Incremented per loadRangeData call, so a slower response for an older range
-  // can't overwrite the data of the range picked after it.
-  const latestRangeRequest = useRef(0);
+  // So a slower response for an older range can't overwrite the data of the range picked after it.
+  const rangeRequests = useRef(createLatestRequestTracker()).current;
 
   const userGamesCacheKey = (userId: string, range: DateRange) => `${userId}:${rangeKey(range)}`;
 
   async function loadRangeData(range: DateRange) {
-    const requestId = ++latestRangeRequest.current;
-    const isStale = () => requestId !== latestRangeRequest.current;
+    const isStale = rangeRequests.begin();
     setRangeLoading(true);
     const query = rangeQuery(range);
     try {

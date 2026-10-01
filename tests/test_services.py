@@ -393,3 +393,79 @@ async def test_cleanup_open_sessions_closes_everything(tracking_service: Trackin
     activity_result = await db_session.execute(select(ActivitySession))
     assert all(s.end_time is not None for s in voice_result.scalars().all())
     assert all(s.end_time is not None for s in activity_result.scalars().all())
+
+
+async def test_sync_member_voice_opens_sessions_for_member_in_channel(
+    tracking_service: TrackingService, db_session
+):
+    channel = make_voice_channel(id=100, name="General")
+    member = make_member(id=1, voice=make_voice_state(channel=channel))
+
+    await tracking_service.sync_member_voice(member)
+    await db_session.commit()
+
+    result = await db_session.execute(select(VoiceSession).where(VoiceSession.user_id == 1))
+    sessions = result.scalars().all()
+    assert len(sessions) == 1
+    assert sessions[0].channel_id == 100
+    assert sessions[0].channel_name == "General"
+    assert sessions[0].end_time is None
+    state_sessions = await _voice_state_sessions(db_session)
+    assert {s.kind for s in state_sessions} == {"unmuted", "undeafened"}
+    assert all(s.end_time is None for s in state_sessions)
+
+
+async def test_sync_member_voice_respects_mute_and_deafen(tracking_service: TrackingService, db_session):
+    channel = make_voice_channel(id=100, name="General")
+    member = make_member(id=1, voice=make_voice_state(channel=channel, self_mute=True))
+
+    await tracking_service.sync_member_voice(member)
+    await db_session.commit()
+
+    assert [s.kind for s in await _voice_state_sessions(db_session)] == ["undeafened"]
+
+
+async def test_sync_member_voice_ignores_member_outside_voice(tracking_service: TrackingService, db_session):
+    await tracking_service.sync_member_voice(make_member(id=1, voice=None))
+    await db_session.commit()
+
+    result = await db_session.execute(select(VoiceSession))
+    assert result.scalars().all() == []
+    assert await _voice_state_sessions(db_session) == []
+
+
+async def test_sync_member_voice_is_idempotent(tracking_service: TrackingService, db_session):
+    channel = make_voice_channel(id=100, name="General")
+    member = make_member(id=1, voice=make_voice_state(channel=channel))
+
+    await tracking_service.sync_member_voice(member)
+    await db_session.commit()
+    await tracking_service.sync_member_voice(member)
+    await db_session.commit()
+
+    result = await db_session.execute(select(VoiceSession))
+    assert len(result.scalars().all()) == 1
+    assert len(await _voice_state_sessions(db_session)) == 2
+
+
+async def test_restart_reopens_voice_sessions_that_cleanup_closed(
+    tracking_service: TrackingService, db_session
+):
+    channel = make_voice_channel(id=100, name="General")
+    member = make_member(id=1, voice=make_voice_state(channel=channel))
+    await tracking_service.handle_voice_state_update(
+        member, make_voice_state(channel=None), make_voice_state(channel=channel)
+    )
+
+    # What on_ready does after a restart: close leftovers, then re-sync current state.
+    await tracking_service.cleanup_open_sessions()
+    await tracking_service.sync_member_voice(member)
+    await db_session.commit()
+
+    result = await db_session.execute(select(VoiceSession).order_by(VoiceSession.id))
+    sessions = result.scalars().all()
+    assert len(sessions) == 2
+    assert sessions[0].end_time is not None
+    assert sessions[1].end_time is None
+    open_states = [s for s in await _voice_state_sessions(db_session) if s.end_time is None]
+    assert {s.kind for s in open_states} == {"unmuted", "undeafened"}

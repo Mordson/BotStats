@@ -12,9 +12,7 @@ import logging
 import discord
 from discord.ext import commands
 
-from config import settings
-from core.database import async_session
-from core.services import TrackingService
+from bot.tracking import is_tracked, run_tracking
 
 logger = logging.getLogger("bot.presence_tracker")
 
@@ -31,17 +29,14 @@ class PresenceTrackerCog(commands.Cog):
         before: discord.Member,
         after: discord.Member,
     ) -> None:
-        if after.bot:
+        if not is_tracked(after):
             return
-        if settings.guild_id is not None and after.guild.id != settings.guild_id:
-            return
-
-        try:
-            async with async_session() as session:
-                service = TrackingService(session)
-                await service.handle_presence_update(before, after)
-        except Exception:  # noqa: BLE001
-            logger.exception("Błąd podczas obsługi on_presence_update dla %s", after)
+        await run_tracking(
+            logger,
+            "on_presence_update",
+            after,
+            lambda service: service.handle_presence_update(before, after),
+        )
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -14,9 +14,7 @@ import logging
 import discord
 from discord.ext import commands
 
-from config import settings
-from core.database import async_session
-from core.services import TrackingService
+from bot.tracking import is_tracked, run_tracking
 
 logger = logging.getLogger("bot.member_tracker")
 
@@ -33,19 +31,11 @@ class MemberTrackerCog(commands.Cog):
         before: discord.Member,
         after: discord.Member,
     ) -> None:
-        if after.bot:
+        if not is_tracked(after) or before.roles == after.roles:
             return
-        if settings.guild_id is not None and after.guild.id != settings.guild_id:
-            return
-        if before.roles == after.roles:
-            return
-
-        try:
-            async with async_session() as session:
-                service = TrackingService(session)
-                await service.sync_member(after)
-        except Exception:  # noqa: BLE001
-            logger.exception("Błąd podczas obsługi on_member_update dla %s", after)
+        await run_tracking(
+            logger, "on_member_update", after, lambda service: service.sync_member(after)
+        )
 
 
 async def setup(bot: commands.Bot) -> None:

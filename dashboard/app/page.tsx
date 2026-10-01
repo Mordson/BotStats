@@ -1,7 +1,7 @@
 import Dashboard from "@/components/Dashboard";
 import {
+  apiErrorMessage,
   apiFetch,
-  ApiError,
   type ChannelTimeOut,
   type EngagementOut,
   type GameTimeOut,
@@ -35,7 +35,7 @@ export default async function Page() {
       apiFetch<UserOut[]>("/users/"),
     ]);
   } catch (err) {
-    error = err instanceof ApiError ? err.message : "Nieznany błąd API";
+    error = apiErrorMessage(err);
   }
 
   return (

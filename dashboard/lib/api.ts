@@ -57,6 +57,11 @@ export class ApiError extends Error {
   }
 }
 
+/** User-facing text for an error thrown by `apiFetch`. */
+export function apiErrorMessage(err: unknown): string {
+  return err instanceof ApiError ? err.message : "Nieznany błąd API";
+}
+
 export async function apiFetch<T>(
   path: string,
   params?: Record<string, string | number | undefined>,

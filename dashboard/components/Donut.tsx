@@ -10,6 +10,12 @@ interface DonutProps<T> {
   periodLabel?: string;
 }
 
+interface Slice {
+  label: string;
+  value: number;
+  color: string;
+}
+
 export default function Donut<T>({
   items,
   getLabel,
@@ -19,21 +25,22 @@ export default function Donut<T>({
   periodLabel,
 }: DonutProps<T>) {
   const totalAll = items.reduce((s, item) => s + getValue(item), 0);
-  const { shownCount, otherTotal: otherSeconds } = splitDonutSlices(items.map(getValue));
-  const donutSlices = items.slice(0, shownCount);
+  const { shownCount, otherTotal } = splitDonutSlices(items.map(getValue));
+  const slices: Slice[] = items.slice(0, shownCount).map((item, i) => ({
+    label: getLabel(item),
+    value: getValue(item),
+    color: getColor(item, i),
+  }));
+  if (otherTotal > 0) slices.push({ label: "Inne", value: otherTotal, color: GRAY });
+
+  const percentOf = (value: number) => (totalAll ? (value / totalAll) * 100 : 0);
 
   let acc = 0;
-  const stops: string[] = [];
-  donutSlices.forEach((item, i) => {
-    const pct = totalAll ? (getValue(item) / totalAll) * 100 : 0;
-    stops.push(`${getColor(item, i)} ${acc}% ${acc + pct}%`);
-    acc += pct;
+  const stops = slices.map(({ value, color }) => {
+    const start = acc;
+    acc += percentOf(value);
+    return `${color} ${start}% ${acc}%`;
   });
-  if (otherSeconds > 0) {
-    const pct = totalAll ? (otherSeconds / totalAll) * 100 : 0;
-    stops.push(`${GRAY} ${acc}% ${acc + pct}%`);
-    acc += pct;
-  }
   const background = stops.length
     ? `conic-gradient(${stops.join(", ")})`
     : "rgba(255,255,255,.06)";
@@ -50,28 +57,17 @@ export default function Donut<T>({
         {periodLabel && <div className="donut-period">{periodLabel}</div>}
       </div>
       <div className="legend">
-        {donutSlices.map((item, i) => {
-          const value = getValue(item);
-          const pct = totalAll ? Math.round((value / totalAll) * 1000) / 10 : 0;
-          return (
-            <div className="legend-row" key={getLabel(item)}>
-              <div className="dot" style={{ background: getColor(item, i) }} />
-              <div className="name">{getLabel(item)}</div>
-              <div className="hrs mono">{fmtHours(value)}</div>
-              <div className="pct mono">{pct}%</div>
-            </div>
-          );
-        })}
-        {otherSeconds > 0 && (
-          <div className="legend-row">
-            <div className="dot" style={{ background: GRAY }} />
-            <div className="name">Inne</div>
-            <div className="hrs mono">{fmtHours(otherSeconds)}</div>
+        {/* Keyed by position: labels (e.g. display names) aren't guaranteed unique. */}
+        {slices.map(({ label, value, color }, i) => (
+          <div className="legend-row" key={i}>
+            <div className="dot" style={{ background: color }} />
+            <div className="name">{label}</div>
+            <div className="hrs mono">{fmtHours(value)}</div>
             <div className="pct mono">
-              {totalAll ? Math.round((otherSeconds / totalAll) * 1000) / 10 : 0}%
+              {totalAll ? Math.round((value / totalAll) * 1000) / 10 : 0}%
             </div>
           </div>
-        )}
+        ))}
       </div>
     </div>
   );

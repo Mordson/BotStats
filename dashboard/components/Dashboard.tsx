@@ -9,12 +9,13 @@ import type {
   ChannelTimeOut,
   EngagementOut,
   GameTimeOut,
+  GenreTimeOut,
   UserGameTimeOut,
   UserOut,
   VoiceTimeOut,
 } from "@/lib/api";
 
-type Tab = "voice" | "games" | "user" | "engagement";
+type Tab = "voice" | "games" | "genres" | "user" | "engagement";
 
 interface DashboardProps {
   initialDateRange: DateRange;
@@ -22,6 +23,7 @@ interface DashboardProps {
   initialChannelsData: ChannelTimeOut[];
   initialGamesData: GameTimeOut[];
   initialEngagementData: EngagementOut[];
+  initialGenresData: GenreTimeOut[];
   initialUsers: UserOut[];
   initialError: string | null;
 }
@@ -35,6 +37,7 @@ export default function Dashboard({
   initialChannelsData,
   initialGamesData,
   initialEngagementData,
+  initialGenresData,
   initialUsers,
   initialError,
 }: DashboardProps) {
@@ -44,6 +47,7 @@ export default function Dashboard({
   const [channelsData, setChannelsData] = useState(initialChannelsData);
   const [gamesData, setGamesData] = useState(initialGamesData);
   const [engagementData, setEngagementData] = useState(initialEngagementData);
+  const [genresData, setGenresData] = useState(initialGenresData);
   const [users, setUsers] = useState(initialUsers);
   const [gamesLimit, setGamesLimit] = useState(10);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(
@@ -61,17 +65,21 @@ export default function Dashboard({
     const params = new URLSearchParams(rangeToParams(range) as Record<string, string>);
     const gamesParams = new URLSearchParams({ ...rangeToParams(range), limit: "1000" } as Record<string, string>);
     try {
-      const [voiceResp, channelsResp, gamesResp, engagementResp] = await Promise.all([
+      const [voiceResp, channelsResp, gamesResp, engagementResp, genresResp] = await Promise.all([
         fetch(`/api/stats/voice-time?${params}`),
         fetch(`/api/stats/voice-channels?${params}`),
         fetch(`/api/stats/top-games?${gamesParams}`),
         fetch(`/api/stats/engagement?${params}`),
+        fetch(`/api/stats/top-genres?${params}`),
       ]);
-      if (!voiceResp.ok || !channelsResp.ok || !gamesResp.ok || !engagementResp.ok) throw new Error("http");
+      if (!voiceResp.ok || !channelsResp.ok || !gamesResp.ok || !engagementResp.ok || !genresResp.ok) {
+        throw new Error("http");
+      }
       setVoiceData(await voiceResp.json());
       setChannelsData(await channelsResp.json());
       setGamesData(await gamesResp.json());
       setEngagementData(await engagementResp.json());
+      setGenresData(await genresResp.json());
       setError(null);
     } catch {
       setError(CONNECTION_ERROR);
@@ -79,6 +87,7 @@ export default function Dashboard({
       setChannelsData([]);
       setGamesData([]);
       setEngagementData([]);
+      setGenresData([]);
     } finally {
       setRangeLoading(false);
     }
@@ -257,6 +266,12 @@ export default function Dashboard({
             🕹️ Top gry
           </button>
           <button
+            className={`tab${activeTab === "genres" ? " active" : ""}`}
+            onClick={() => handleTabChange("genres")}
+          >
+            🏷️ Gatunki
+          </button>
+          <button
             className={`tab${activeTab === "user" ? " active" : ""}`}
             onClick={() => handleTabChange("user")}
           >
@@ -342,6 +357,38 @@ export default function Dashboard({
                   getLabel={(g) => g.activity_name}
                   getValue={(g) => g.total_seconds}
                   getColor={(g, i) => colorFor(g.activity_name, i)}
+                />
+              </>
+            )}
+          </section>
+
+          <section className="panel" hidden={activeTab !== "genres"}>
+            <div className="panel-head">
+              <h2>Gatunki gier - łączny czas wszystkich użytkowników</h2>
+            </div>
+            {rangeLoading ? (
+              <div className="loading-state">Ładowanie…</div>
+            ) : genresData.length === 0 ? (
+              <div className="empty-state">
+                Brak danych - bot jeszcze nie zarejestrował żadnych gier w tym okresie.
+              </div>
+            ) : (
+              <>
+                <Donut
+                  items={genresData}
+                  getLabel={(g) => g.genre}
+                  getValue={(g) => g.total_seconds}
+                  getColor={(g, i) => colorFor(g.genre, i)}
+                  centerLabel="łącznie"
+                  periodLabel={periodLabel}
+                />
+                <div className="games-list-title">Ranking gatunków</div>
+                <RankingList
+                  items={genresData}
+                  getLabel={(g) => g.genre}
+                  getValue={(g) => g.total_seconds}
+                  getColor={(g, i) => colorFor(g.genre, i)}
+                  getSubtitle={(g) => g.top_games.map((game) => game.activity_name).join(", ")}
                 />
               </>
             )}

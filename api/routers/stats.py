@@ -8,8 +8,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_db_session
-from api.schemas import ChannelTimeOut, EngagementOut, GameTimeOut, VoiceTimeOut
+from api.schemas import ChannelTimeOut, EngagementOut, GameTimeOut, GenreTimeOut, VoiceTimeOut
 from config import settings
+from core.game_genres import aggregate_by_genre, unclassified_games
 from core.repositories import (
     ActivitySessionRepository,
     UserRepository,
@@ -74,6 +75,55 @@ async def top_games(
         limit=limit, since=since, until=until, role_ids=settings.visible_role_ids_list or None
     )
     return [GameTimeOut(activity_name=name, total_seconds=seconds) for name, seconds in rows]
+
+
+@router.get("/top-genres", response_model=list[GenreTimeOut])
+async def top_genres(
+    since: datetime | None = None,
+    until: datetime | None = None,
+    session: AsyncSession = Depends(get_db_session),
+) -> list[GenreTimeOut]:
+    """
+    Genre leaderboard by total play time (see core/game_genres.py for the mapping).
+
+    Games missing from the mapping are grouped under "Bez kategorii"; ignored ones
+    (e.g. Roblox, non-game apps) are left out. Same visibility filter as
+    `/stats/top-games`.
+    """
+    repo = ActivitySessionRepository(session)
+    rows = await repo.top_games(
+        limit=None, since=since, until=until, role_ids=settings.visible_role_ids_list or None
+    )
+    return [
+        GenreTimeOut(
+            genre=genre.genre,
+            total_seconds=genre.total_seconds,
+            top_games=[
+                GameTimeOut(activity_name=name, total_seconds=seconds)
+                for name, seconds in genre.top_games
+            ],
+        )
+        for genre in aggregate_by_genre(rows)
+    ]
+
+
+@router.get("/unclassified-games", response_model=list[GameTimeOut])
+async def unclassified_games_list(
+    since: datetime | None = None,
+    until: datetime | None = None,
+    session: AsyncSession = Depends(get_db_session),
+) -> list[GameTimeOut]:
+    """
+    Games not yet assigned a genre (nor ignored) in core/game_genres.py, by play time -
+    the to-do list for keeping the mapping up to date. Not role-filtered, so every
+    tracked game shows up.
+    """
+    repo = ActivitySessionRepository(session)
+    rows = await repo.top_games(limit=None, since=since, until=until)
+    return [
+        GameTimeOut(activity_name=name, total_seconds=seconds)
+        for name, seconds in unclassified_games(rows)
+    ]
 
 
 @router.get("/engagement", response_model=list[EngagementOut])

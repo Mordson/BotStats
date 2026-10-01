@@ -468,13 +468,14 @@ class ActivitySessionRepository:
 
     async def top_games(
         self,
-        limit: int = 10,
+        limit: int | None = 10,
         since: datetime | None = None,
         until: datetime | None = None,
         role_ids: list[int] | None = None,
     ) -> list[tuple[str, int]]:
         """
         Game leaderboard (activity_type == 'playing') by total play time.
+        `limit=None` returns every game.
 
         Same overlap-window semantics as `VoiceSessionRepository.total_time_by_user`.
         """

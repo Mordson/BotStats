@@ -28,6 +28,13 @@ export interface GameTimeOut {
 
 export type UserGameTimeOut = GameTimeOut;
 
+export interface GenreTimeOut {
+  genre: string;
+  total_seconds: number;
+  /** The genre's most-played games, descending. */
+  top_games: GameTimeOut[];
+}
+
 export interface EngagementOut {
   user_id: string;
   display_name: string;

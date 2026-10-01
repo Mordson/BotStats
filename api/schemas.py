@@ -58,6 +58,13 @@ class UserGameTimeOut(BaseModel):
     total_seconds: int
 
 
+class GenreTimeOut(BaseModel):
+    genre: str
+    total_seconds: int
+    # The genre's most-played games, descending.
+    top_games: list[GameTimeOut]
+
+
 class EngagementOut(BaseModel):
     user_id: int
     display_name: str

@@ -15,6 +15,7 @@ discord-activity-bot/
 ├── config.py              # shared configuration (Pydantic Settings)
 ├── core/                  # shared layer -models, repositories, services
 │   ├── database.py        # SQLAlchemy async engine (PostgreSQL)
+│   ├── game_genres.py     # hand-maintained game → genre mapping, per-genre aggregation
 │   ├── models.py          # ORM models: User, VoiceSession, ActivitySession
 │   ├── repositories.py    # Repository pattern -all database queries
 │   └── services.py        # Service layer -tracking business logic
@@ -46,20 +47,32 @@ discord-activity-bot/
 
 ### Dashboard
 
-A Next.js (App Router) app with three tabs, each showing a pie chart (`Donut`) paired with a ranked
+A Next.js (App Router) app with tabs, each showing a pie chart (`Donut`) paired with a ranked
 list:
 
 - **Czas głosowy** -voice-channel time leaderboard across all tracked users.
 - **Top gry** -game leaderboard by total playtime (configurable count via a dropdown).
+- **Gatunki** -playtime by game genre, with each genre's top 3 games (see "Game genres" below).
 - **Użytkownik** -per-user breakdown of playtime by game.
 
-A time-range picker (24h / week / month / half-year / year) filters all three tabs via the API's
+A time-range picker (24h / week / month / half-year / year) filters all tabs via the API's
 `since` param (see "API endpoints" below). The dashboard talks to the API only server-side -see
 "Running with Docker Compose" for the request-flow details.
 
 Each Donut always shows the top 8 items as their own slices. Past that, the next item gets its own
 slice (and legend row) while it makes up at least 20% of the remaining "Inne" (other) total, up to
 12 slices; if only one item would be left in "Inne", it is shown on its own instead.
+
+### Game genres
+
+Discord doesn't report a game's genre, so `core/game_genres.py` maps each game by hand (keyed by the
+lowercased, normalized activity name) to exactly one genre: MMO, Strzelanki, Survival, Symulatory, RPG,
+MOBA or Strategie. `IGNORED_GAMES` lists activities left out of genre stats entirely (Roblox, non-game
+apps like CurseForge, casual games); they still appear in the per-game stats. Any other game is counted
+under "Bez kategorii".
+
+When a new game shows up, check `GET /stats/unclassified-games`, add each listed name to either
+`GAME_GENRES` or `IGNORED_GAMES`, then rebuild the API image.
 
 ### Design patterns
 
@@ -164,12 +177,14 @@ server.
 - `GET /users/{user_id}/games` - per-game playtime for a user (`since` query param, optional)
 - `GET /stats/voice-time` - user leaderboard by voice channel time (`since` query param, optional)
 - `GET /stats/top-games` - game leaderboard by total playtime (`limit`, `since` query params)
+- `GET /stats/top-genres` - genre leaderboard by total playtime, each with its top 3 games (`since`)
+- `GET /stats/unclassified-games` - games not yet mapped to a genre (nor ignored), by playtime (`since`)
 
 `since` restricts results to sessions overlapping `[since, now]` -a session that started earlier but
 ended (or is still open) after `since` is partially counted rather than dropped. Omitting it returns
 all-time totals.
 
-`GET /stats/top-games` additionally filters to users holding one of the configured `VISIBLE_ROLE_IDS`
+`GET /stats/top-games` and `GET /stats/top-genres` additionally filter to users holding one of the configured `VISIBLE_ROLE_IDS`
 (server-side, via `config.py`; empty = unfiltered) -a privacy/visibility feature, not access control.
 
 All times are returned in **seconds** (`total_seconds`) -conversion to hours/days is left to the frontend.

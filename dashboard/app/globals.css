@@ -345,6 +345,14 @@ select option {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.rank-sub {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .rank-value {
   font-family: var(--font-mono), monospace;
   font-size: 12.5px;

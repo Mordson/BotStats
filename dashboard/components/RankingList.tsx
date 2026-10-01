@@ -10,6 +10,8 @@ interface RankingListProps<T> {
   getDisplayValue?: (item: T) => string;
   /** Native hover tooltip for the row; omit (or return undefined) for no tooltip. */
   getTooltip?: (item: T) => string | undefined;
+  /** Secondary line under the bar; omit (or return undefined) for none. */
+  getSubtitle?: (item: T) => string | undefined;
 }
 
 export default function RankingList<T>({
@@ -20,6 +22,7 @@ export default function RankingList<T>({
   useAvatar = false,
   getDisplayValue,
   getTooltip,
+  getSubtitle,
 }: RankingListProps<T>) {
   const max = Math.max(...items.map(getValue), 1);
 
@@ -29,6 +32,7 @@ export default function RankingList<T>({
         const label = getLabel(item);
         const value = getValue(item);
         const color = getColor(item, i);
+        const subtitle = getSubtitle?.(item);
         return (
           <div className="rank-row" key={`${label}-${i}`} title={getTooltip?.(item)}>
             <div className="rank-index mono">#{i + 1}</div>
@@ -52,6 +56,7 @@ export default function RankingList<T>({
                   style={{ width: `${(value / max) * 100}%`, background: color }}
                 />
               </div>
+              {subtitle && <div className="rank-sub">{subtitle}</div>}
             </div>
           </div>
         );

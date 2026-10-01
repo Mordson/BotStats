@@ -72,7 +72,7 @@ async def top_games(
     """Game leaderboard by total play time of users with visible roles."""
     repo = ActivitySessionRepository(session)
     rows = await repo.top_games(
-        limit=limit, since=since, until=until, role_ids=settings.visible_role_ids_list or None
+        limit=limit, since=since, until=until, role_ids=settings.visible_role_ids_list
     )
     return [GameTimeOut(activity_name=name, total_seconds=seconds) for name, seconds in rows]
 
@@ -92,7 +92,7 @@ async def top_genres(
     """
     repo = ActivitySessionRepository(session)
     rows = await repo.top_games(
-        limit=None, since=since, until=until, role_ids=settings.visible_role_ids_list or None
+        limit=None, since=since, until=until, role_ids=settings.visible_role_ids_list
     )
     return [
         GenreTimeOut(
@@ -165,7 +165,7 @@ async def engagement_leaderboard(
     undeafened_seconds_by_user, undeafened_estimated_by_user = engagement_by_kind["undeafened"]
 
     users_by_id = {
-        user.id: user for user in await user_repo.get_all(role_ids=settings.visible_role_ids_list or None)
+        user.id: user for user in await user_repo.get_all(role_ids=settings.visible_role_ids_list)
     }
 
     result = []

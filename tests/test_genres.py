@@ -25,7 +25,7 @@ async def test_top_genres_sums_games_into_their_genre(api_client, db_session):
     assert response.status_code == 200
     assert response.json() == [
         {
-            "genre": "Strzelanki",
+            "genre": "FPS",
             "total_seconds": 150,
             "top_games": [
                 {"activity_name": "Counter-Strike 2", "total_seconds": 100},
@@ -76,7 +76,7 @@ def test_mapping_keys_are_normalized_lowercase_names():
 def test_mapping_uses_only_the_agreed_genres():
     # Catches typos - a misspelled genre would silently become a separate Donut slice.
     assert set(GAME_GENRES.values()) == {
-        "MMO", "Strzelanki", "Survival", "Symulatory", "RPG", "MOBA", "Strategie"
+        "MMO", "FPS", "Survival", "Symulatory", "RPG", "MOBA", "Strategie"
     }
 
 

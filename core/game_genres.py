@@ -23,19 +23,19 @@ GAME_GENRES: dict[str, str] = {
     # MMO
     "world of tanks": "MMO",
     "war thunder": "MMO",
-    # Strzelanki
-    "fortnite": "Strzelanki",
-    "retrac": "Strzelanki",  # Fortnite private server
-    "s.t.a.l.k.e.r. 2 heart of chornobyl": "Strzelanki",
-    "counter-strike 2": "Strzelanki",
-    "ghost recon breakpoint": "Strzelanki",
-    "tom clancy's ghost recon breakpoint": "Strzelanki",
-    "arena breakout infinite": "Strzelanki",
-    "call of duty black ops 7": "Strzelanki",
-    "call of duty wwii": "Strzelanki",
-    "battlefield 6": "Strzelanki",
-    "delta force": "Strzelanki",
-    "aim/flash trainer": "Strzelanki",
+    # FPS
+    "fortnite": "FPS",
+    "retrac": "FPS",  # Fortnite private server
+    "s.t.a.l.k.e.r. 2 heart of chornobyl": "FPS",
+    "counter-strike 2": "FPS",
+    "ghost recon breakpoint": "FPS",
+    "tom clancy's ghost recon breakpoint": "FPS",
+    "arena breakout infinite": "FPS",
+    "call of duty black ops 7": "FPS",
+    "call of duty wwii": "FPS",
+    "battlefield 6": "FPS",
+    "delta force": "FPS",
+    "aim/flash trainer": "FPS",
     # Survival
     "7 days to die": "Survival",
     "starrupture": "Survival",

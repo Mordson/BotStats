@@ -66,7 +66,7 @@ slice (and legend row) while it makes up at least 20% of the remaining "Inne" (o
 ### Game genres
 
 Discord doesn't report a game's genre, so `core/game_genres.py` maps each game by hand (keyed by the
-lowercased, normalized activity name) to exactly one genre: MMO, Strzelanki, Survival, Symulatory, RPG,
+lowercased, normalized activity name) to exactly one genre: MMO, FPS, Survival, Symulatory, RPG,
 MOBA or Strategie. `IGNORED_GAMES` lists activities left out of genre stats entirely (Roblox, non-game
 apps like CurseForge, casual games); they still appear in the per-game stats. Any other game is counted
 under "Bez kategorii".

@@ -100,6 +100,7 @@ def make_member(
     roles: list[SimpleNamespace] | None = None,
     guild_id: int = 1,
     activities: list[SimpleNamespace] | None = None,
+    voice: SimpleNamespace | None = None,
 ) -> FakeMember:
     return FakeMember(
         id=id,
@@ -108,4 +109,5 @@ def make_member(
         roles=roles or [],
         guild=SimpleNamespace(id=guild_id),
         activities=activities or [],
+        voice=voice,
     )

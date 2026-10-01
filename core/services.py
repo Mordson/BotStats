@@ -24,6 +24,9 @@ from core.repositories import (
     _normalize_activity_name,
 )
 
+# Voice State Session kind -> the VoiceState flag that closes it when True.
+_VOICE_STATE_DIMENSIONS = (("unmuted", "self_mute"), ("undeafened", "self_deaf"))
+
 
 class TrackingService:
     def __init__(self, session: AsyncSession) -> None:
@@ -82,7 +85,7 @@ class TrackingService:
 
         was_connected = before.channel is not None
         is_connected = after.channel is not None
-        for kind, attr in (("unmuted", "self_mute"), ("undeafened", "self_deaf")):
+        for kind, attr in _VOICE_STATE_DIMENSIONS:
             await self._sync_voice_state_dimension(
                 member,
                 kind=kind,
@@ -179,6 +182,39 @@ class TrackingService:
                     activity_name=normalized,
                     activity_type=activity.type.name,
                     start_time=now,
+                )
+
+    async def sync_member_voice(self, member: discord.Member) -> None:
+        """
+        Opens voice and Voice State Sessions for a member already sitting in a
+        voice channel at the time of the call.
+
+        Called on bot startup, right after cleanup_open_sessions() - otherwise
+        people in voice during a restart stop being counted until they rejoin,
+        because on_voice_state_update only fires on changes.
+        """
+        voice = member.voice
+        if voice is None or voice.channel is None:
+            return
+
+        now = datetime.now(timezone.utc)
+        await self.ensure_user(member)
+
+        if await self.voice.get_open_session(member.id) is None:
+            await self.voice.start_session(
+                user_id=member.id,
+                guild_id=member.guild.id,
+                channel_id=voice.channel.id,
+                channel_name=voice.channel.name,
+                start_time=now,
+            )
+
+        for kind, attr in _VOICE_STATE_DIMENSIONS:
+            if getattr(voice, attr):
+                continue
+            if await self.voice_states.get_open_session(member.id, kind) is None:
+                await self.voice_states.start_session(
+                    user_id=member.id, guild_id=member.guild.id, kind=kind, start_time=now
                 )
 
     async def cleanup_open_sessions(self) -> None:

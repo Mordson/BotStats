@@ -60,6 +60,17 @@ export function rangeToParams(range: DateRange): { since: string; until?: string
   };
 }
 
+/** `rangeToParams` (plus any `extra` params) as a ready-to-append query string. */
+export function rangeQuery(range: DateRange, extra?: Record<string, string>): URLSearchParams {
+  return new URLSearchParams({ ...rangeToParams(range), ...extra });
+}
+
+/** The local calendar date of `date` as YYYY-MM-DD (the format of `<input type="date">`). */
+export function localDateInput(date: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 export function formatRangeLabel(range: DateRange): string {
   if (range.kind === "preset") {
     return TIME_RANGES.find((r) => r.hours === range.hours)?.label ?? "";

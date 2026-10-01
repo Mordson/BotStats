@@ -1,19 +1,15 @@
 "use client";
 
-import { CUSTOM_RANGE_VALUE, DateRange, TIME_RANGES, presetRange } from "@/lib/format";
+import { CUSTOM_RANGE_VALUE, DateRange, TIME_RANGES, localDateInput, presetRange } from "@/lib/format";
 
 interface TimeRangePickerProps {
   value: DateRange;
   onChange: (range: DateRange) => void;
 }
 
-function todayDateInput(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function defaultCustomRange(): DateRange {
-  const untilDate = todayDateInput();
-  const sinceDate = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const untilDate = localDateInput();
+  const sinceDate = localDateInput(new Date(Date.now() - 7 * 24 * 3600 * 1000));
   return { kind: "custom", sinceDate, untilDate };
 }
 
@@ -64,7 +60,7 @@ export default function TimeRangePicker({ value, onChange }: TimeRangePickerProp
               type="date"
               value={value.untilDate}
               min={value.sinceDate}
-              max={todayDateInput()}
+              max={localDateInput()}
               onChange={(e) => handleCustomDateChange("untilDate", e.target.value)}
             />
           </div>

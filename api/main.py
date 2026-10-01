@@ -1,8 +1,7 @@
 """
 FastAPI application - the API layer exposing data to the dashboard.
 
-Run (dev):
-    uvicorn api.main:app --reload
+Runs as the `api` service of docker-compose.yml (port 8000, docs at /docs).
 """
 
 from __future__ import annotations

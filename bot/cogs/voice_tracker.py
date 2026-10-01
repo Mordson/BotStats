@@ -12,9 +12,7 @@ import logging
 import discord
 from discord.ext import commands
 
-from config import settings
-from core.database import async_session
-from core.services import TrackingService
+from bot.tracking import is_tracked, run_tracking
 
 logger = logging.getLogger("bot.voice_tracker")
 
@@ -32,17 +30,14 @@ class VoiceTrackerCog(commands.Cog):
         before: discord.VoiceState,
         after: discord.VoiceState,
     ) -> None:
-        if member.bot:
+        if not is_tracked(member):
             return
-        if settings.guild_id is not None and member.guild.id != settings.guild_id:
-            return
-
-        try:
-            async with async_session() as session:
-                service = TrackingService(session)
-                await service.handle_voice_state_update(member, before, after)
-        except Exception:  # noqa: BLE001
-            logger.exception("Błąd podczas obsługi on_voice_state_update dla %s", member)
+        await run_tracking(
+            logger,
+            "on_voice_state_update",
+            member,
+            lambda service: service.handle_voice_state_update(member, before, after),
+        )
 
 
 async def setup(bot: commands.Bot) -> None:

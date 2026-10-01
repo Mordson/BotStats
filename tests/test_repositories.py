@@ -6,6 +6,7 @@ from core.repositories import (
     _duration_seconds,
     _normalize_activity_name,
     _sum_overlap_seconds,
+    UserRepository,
 )
 
 
@@ -225,3 +226,9 @@ def test_sum_overlap_groups_multiple_rows_by_key():
         ("u2", now - timedelta(minutes=1), now),
     ]
     assert _sum_overlap_seconds(rows, None, None, now) == {"u1": 900, "u2": 60}
+
+
+async def test_new_user_first_seen_is_timezone_aware(db_session):
+    user = await UserRepository(db_session).get_or_create(1, "alice", "Alice", [])
+
+    assert user.first_seen.tzinfo is not None

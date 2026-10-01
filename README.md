@@ -21,6 +21,7 @@ discord-activity-bot/
 │   └── services.py        # Service layer -tracking business logic
 ├── bot/                   # Discord bot (discord.py)
 │   ├── main.py            # entry point, cog registration
+│   ├── tracking.py        # shared cog glue: tracked-member filter, session + error handling
 │   └── cogs/
 │       ├── voice_tracker.py    # on_voice_state_update → voice time
 │       ├── presence_tracker.py # on_presence_update → games/activities
@@ -38,11 +39,15 @@ discord-activity-bot/
     ├── components/
     │   ├── Dashboard.tsx        # tabs, time-range picker, client-side refetching
     │   ├── Donut.tsx             # pie chart (voice time / top games / per-user games)
+    │   ├── DonutRanking.tsx      # a Donut plus its RankingList, as shown in each panel
+    │   ├── PanelBody.tsx         # loading / empty / content switch for a panel
     │   └── RankingList.tsx       # leaderboard list paired with each Donut
     └── lib/
         ├── api.ts               # server-only fetch wrapper (talks to the FastAPI backend)
         ├── donutSlices.ts        # which items get their own Donut slice vs. "Inne"
-        └── format.ts             # time-range options, hour/minute formatting, color palette
+        ├── format.ts             # time-range options, hour/minute formatting, color palette
+        ├── proxy.ts              # proxyGet() backing every app/api route handler
+        └── rangeData.ts          # the datasets that depend on the selected time range
 ```
 
 ### Dashboard
@@ -174,39 +179,43 @@ server.
 
 - `GET /users/` - list of users
 - `GET /users/{user_id}` - single user data
-- `GET /users/{user_id}/games` - per-game playtime for a user (`since` query param, optional)
-- `GET /stats/voice-time` - user leaderboard by voice channel time (`since` query param, optional)
-- `GET /stats/top-games` - game leaderboard by total playtime (`limit`, `since` query params)
-- `GET /stats/top-genres` - genre leaderboard by total playtime, each with its top 3 games (`since`)
-- `GET /stats/unclassified-games` - games not yet mapped to a genre (nor ignored), by playtime (`since`)
+- `GET /users/{user_id}/games` - per-game playtime for a user
+- `GET /stats/voice-time` - user leaderboard by voice channel time
+- `GET /stats/voice-channels` - voice channel leaderboard by total time across all users
+- `GET /stats/top-games` - game leaderboard by total playtime (plus a `limit` query param)
+- `GET /stats/top-genres` - genre leaderboard by total playtime, each with its top 3 games
+- `GET /stats/unclassified-games` - games not yet mapped to a genre (nor ignored), by playtime
+- `GET /stats/engagement` - per-user share of voice time spent unmuted / undeafened
 
-`since` restricts results to sessions overlapping `[since, now]` -a session that started earlier but
-ended (or is still open) after `since` is partially counted rather than dropped. Omitting it returns
+All `/stats/*` endpoints and `/users/{user_id}/games` take optional `since` and `until` query params
+that restrict results to sessions overlapping `[since, until]` (`until` defaults to now) -a session
+that started earlier or ended later is partially counted rather than dropped. Omitting both returns
 all-time totals.
 
-`GET /stats/top-games` and `GET /stats/top-genres` additionally filter to users holding one of the configured `VISIBLE_ROLE_IDS`
+`GET /stats/top-games`, `GET /stats/top-genres` and `GET /stats/engagement` additionally filter to users holding one of the configured `VISIBLE_ROLE_IDS`
 (server-side, via `config.py`; empty = unfiltered) -a privacy/visibility feature, not access control.
 
 All times are returned in **seconds** (`total_seconds`) -conversion to hours/days is left to the frontend.
 
 ## Running tests
 
+Tests run inside Docker, like the rest of the project:
+
 ```bash
-pytest
+docker compose run --rm api pytest
 ```
 
 `pytest.ini` sets `pythonpath = .` so `tests/` can import repo-root packages (`core`, `api`, `bot`)
 regardless of how pytest is invoked. Run a single test with e.g.:
 
 ```bash
-pytest tests/test_repositories.py::test_strips_trademark_symbols
+docker compose run --rm api pytest tests/test_repositories.py::test_strips_trademark_symbols
 ```
 
-Dashboard unit tests (Vitest) run from `dashboard/`:
+Dashboard unit tests (Vitest) run in a one-off Node container:
 
 ```bash
-cd dashboard
-npm test
+docker run --rm -v "${PWD}/dashboard:/app" -w /app node:22-alpine sh -c "npm install && npm test"
 ```
 
 

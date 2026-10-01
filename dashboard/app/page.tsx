@@ -1,7 +1,7 @@
 import Dashboard from "@/components/Dashboard";
 import {
+  apiErrorMessage,
   apiFetch,
-  ApiError,
   type ChannelTimeOut,
   type EngagementOut,
   type GameTimeOut,
@@ -10,6 +10,7 @@ import {
   type VoiceTimeOut,
 } from "@/lib/api";
 import { presetRange, rangeToParams } from "@/lib/format";
+import { ALL_GAMES_LIMIT, EMPTY_RANGE_DATA, type RangeData } from "@/lib/rangeData";
 
 const DEFAULT_HOURS = 24;
 
@@ -17,35 +18,29 @@ export default async function Page() {
   const initialDateRange = presetRange(DEFAULT_HOURS);
   const { since } = rangeToParams(initialDateRange);
 
-  let voiceData: VoiceTimeOut[] = [];
-  let channelsData: ChannelTimeOut[] = [];
-  let gamesData: GameTimeOut[] = [];
-  let engagementData: EngagementOut[] = [];
-  let genresData: GenreTimeOut[] = [];
+  let rangeData: RangeData = EMPTY_RANGE_DATA;
   let users: UserOut[] = [];
   let error: string | null = null;
 
   try {
-    [voiceData, channelsData, gamesData, engagementData, genresData, users] = await Promise.all([
+    const [voice, channels, games, engagement, genres, fetchedUsers] = await Promise.all([
       apiFetch<VoiceTimeOut[]>("/stats/voice-time", { since }),
       apiFetch<ChannelTimeOut[]>("/stats/voice-channels", { since }),
-      apiFetch<GameTimeOut[]>("/stats/top-games", { since, limit: 1000 }),
+      apiFetch<GameTimeOut[]>("/stats/top-games", { since, limit: ALL_GAMES_LIMIT }),
       apiFetch<EngagementOut[]>("/stats/engagement", { since }),
       apiFetch<GenreTimeOut[]>("/stats/top-genres", { since }),
       apiFetch<UserOut[]>("/users/"),
     ]);
+    rangeData = { voice, channels, games, engagement, genres };
+    users = fetchedUsers;
   } catch (err) {
-    error = err instanceof ApiError ? err.message : "Nieznany błąd API";
+    error = apiErrorMessage(err);
   }
 
   return (
     <Dashboard
       initialDateRange={initialDateRange}
-      initialVoiceData={voiceData}
-      initialChannelsData={channelsData}
-      initialGamesData={gamesData}
-      initialEngagementData={engagementData}
-      initialGenresData={genresData}
+      initialRangeData={rangeData}
       initialUsers={users}
       initialError={error}
     />

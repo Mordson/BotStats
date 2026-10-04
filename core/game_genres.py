@@ -33,6 +33,7 @@ GAME_GENRES: dict[str, str] = {
     "arena breakout infinite": "FPS",
     "call of duty black ops 7": "FPS",
     "call of duty wwii": "FPS",
+    "call of duty modern warfare": "FPS",
     "battlefield 6": "FPS",
     "delta force": "FPS",
     "aim/flash trainer": "FPS",
@@ -50,6 +51,7 @@ GAME_GENRES: dict[str, str] = {
     "thehunter call of the wild": "Symulatory",
     "forza horizon 6": "Symulatory",
     "assetto corsa competizione": "Symulatory",
+    "cities skylines": "Symulatory",
     # RPG
     "kingdom come deliverance": "RPG",
     "kingdom come deliverance ii": "RPG",

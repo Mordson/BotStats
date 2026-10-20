@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gamesLimitOptions, selectedGamesLimit } from "./gamesLimit";
+import { gamesLimitOptions, shownGamesLimit } from "./gamesLimit";
 
 describe("gamesLimitOptions", () => {
   it("ends with the game count rounded up to a full ten", () => {
@@ -30,16 +30,16 @@ describe("gamesLimitOptions", () => {
   });
 });
 
-describe("selectedGamesLimit", () => {
+describe("shownGamesLimit", () => {
   it("keeps a choice that is among the options", () => {
-    expect(selectedGamesLimit(10, [5, 10, 15])).toBe(10);
+    expect(shownGamesLimit(10, [5, 10, 15])).toBe(10);
   });
 
   it("falls back to the last option when the choice exceeds them", () => {
-    expect(selectedGamesLimit(50, [5, 10, 15])).toBe(15);
+    expect(shownGamesLimit(50, [5, 10, 15])).toBe(15);
   });
 
   it("picks the next option up when the choice isn't offered", () => {
-    expect(selectedGamesLimit(230, gamesLimitOptions(380))).toBe(250);
+    expect(shownGamesLimit(30, [5, 10, 50, 100])).toBe(50);
   });
 });

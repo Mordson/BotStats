@@ -15,7 +15,7 @@ import type {
   UserOut,
   VoiceTimeOut,
 } from "@/lib/api";
-import { gamesLimitOptions, selectedGamesLimit } from "@/lib/gamesLimit";
+import { gamesLimitOptions, shownGamesLimit } from "@/lib/gamesLimit";
 import { createLatestRequestTracker } from "@/lib/latestRequest";
 import { ALL_GAMES_LIMIT, EMPTY_RANGE_DATA, type RangeData } from "@/lib/rangeData";
 
@@ -54,7 +54,7 @@ export default function Dashboard({
   const [activeTab, setActiveTab] = useState<Tab>("voice");
   const [rangeData, setRangeData] = useState<RangeData>(initialRangeData);
   const [users, setUsers] = useState(initialUsers);
-  const [gamesLimit, setGamesLimit] = useState(10);
+  const [gamesLimitChoice, setGamesLimitChoice] = useState(10);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(
     initialUsers[0]?.id ?? null,
   );
@@ -144,8 +144,8 @@ export default function Dashboard({
   const { voice: voiceData, channels: channelsData, games: gamesData, engagement: engagementData, genres: genresData } =
     rangeData;
   const periodLabel = formatRangeLabel(dateRange);
-  const gamesLimitChoices = gamesLimitOptions(gamesData.length);
-  const shownGamesLimit = selectedGamesLimit(gamesLimit, gamesLimitChoices);
+  const gamesLimitOptionList = gamesLimitOptions(gamesData.length);
+  const gamesLimitShown = shownGamesLimit(gamesLimitChoice, gamesLimitOptionList);
 
   const cards: { label: string; value: string }[] = [
     { label: "Czas głosowy", value: fmtHours(voiceData.reduce((sum, u) => sum + u.total_seconds, 0)) },
@@ -273,10 +273,10 @@ export default function Dashboard({
               <div>
                 <span className="field-label">Liczba gier</span>
                 <select
-                  value={shownGamesLimit}
-                  onChange={(e) => setGamesLimit(Number(e.target.value))}
+                  value={gamesLimitShown}
+                  onChange={(e) => setGamesLimitChoice(Number(e.target.value))}
                 >
-                  {gamesLimitChoices.map((n) => (
+                  {gamesLimitOptionList.map((n) => (
                     <option key={n} value={n}>
                       {n}
                     </option>
@@ -291,7 +291,7 @@ export default function Dashboard({
             >
               <DonutRanking
                 items={gamesData}
-                rankingItems={gamesData.slice(0, shownGamesLimit)}
+                rankingItems={gamesData.slice(0, gamesLimitShown)}
                 rankingTitle="Ranking gier"
                 periodLabel={periodLabel}
                 getLabel={(g) => g.activity_name}

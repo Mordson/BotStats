@@ -1,9 +1,8 @@
-const BASE_LIMIT_STEPS = [5, 10, 15, 20, 30, 40, 50];
+const BASE_LIMIT_STEPS = [5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
-/** Endless "Liczba gier" steps: 5…50 as listed, then every 10 up to 100, then every 50. */
+/** Endless "Liczba gier" steps: the base ones, then every 50. */
 function* limitSteps(): Generator<number> {
   yield* BASE_LIMIT_STEPS;
-  for (let n = 60; n <= 100; n += 10) yield n;
   for (let n = 150; ; n += 50) yield n;
 }
 
@@ -30,6 +29,6 @@ export function gamesLimitOptions(gameCount: number): number[] {
  * changes even when the current range doesn't offer it: the first option at
  * least as large, or the last one (which already covers every game).
  */
-export function selectedGamesLimit(choice: number, options: number[]): number {
+export function shownGamesLimit(choice: number, options: number[]): number {
   return options.find((n) => n >= choice) ?? options[options.length - 1];
 }

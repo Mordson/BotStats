@@ -144,8 +144,8 @@ export default function Dashboard({
   const { voice: voiceData, channels: channelsData, games: gamesData, engagement: engagementData, genres: genresData } =
     rangeData;
   const periodLabel = formatRangeLabel(dateRange);
-  const gamesOptions = gamesLimitOptions(gamesData.length);
-  const shownGamesLimit = selectedGamesLimit(gamesLimit, gamesOptions);
+  const gamesLimitChoices = gamesLimitOptions(gamesData.length);
+  const shownGamesLimit = selectedGamesLimit(gamesLimit, gamesLimitChoices);
 
   const cards: { label: string; value: string }[] = [
     { label: "Czas głosowy", value: fmtHours(voiceData.reduce((sum, u) => sum + u.total_seconds, 0)) },
@@ -276,7 +276,7 @@ export default function Dashboard({
                   value={shownGamesLimit}
                   onChange={(e) => setGamesLimit(Number(e.target.value))}
                 >
-                  {gamesOptions.map((n) => (
+                  {gamesLimitChoices.map((n) => (
                     <option key={n} value={n}>
                       {n}
                     </option>

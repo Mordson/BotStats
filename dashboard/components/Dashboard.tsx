@@ -15,6 +15,7 @@ import type {
   UserOut,
   VoiceTimeOut,
 } from "@/lib/api";
+import { gamesLimitOptions, selectedGamesLimit } from "@/lib/gamesLimit";
 import { createLatestRequestTracker } from "@/lib/latestRequest";
 import { ALL_GAMES_LIMIT, EMPTY_RANGE_DATA, type RangeData } from "@/lib/rangeData";
 
@@ -35,7 +36,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "engagement", label: "🎙️ Zaangażowanie" },
 ];
 
-const GAMES_LIMIT_OPTIONS = [5, 10, 15, 20, 30, 40, 50];
 const CONNECTION_ERROR = "Nie można połączyć się z API. Upewnij się, że bot i API są uruchomione.";
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -144,6 +144,8 @@ export default function Dashboard({
   const { voice: voiceData, channels: channelsData, games: gamesData, engagement: engagementData, genres: genresData } =
     rangeData;
   const periodLabel = formatRangeLabel(dateRange);
+  const gamesOptions = gamesLimitOptions(gamesData.length);
+  const shownGamesLimit = selectedGamesLimit(gamesLimit, gamesOptions);
 
   const cards: { label: string; value: string }[] = [
     { label: "Czas głosowy", value: fmtHours(voiceData.reduce((sum, u) => sum + u.total_seconds, 0)) },
@@ -271,10 +273,10 @@ export default function Dashboard({
               <div>
                 <span className="field-label">Liczba gier</span>
                 <select
-                  value={gamesLimit}
+                  value={shownGamesLimit}
                   onChange={(e) => setGamesLimit(Number(e.target.value))}
                 >
-                  {GAMES_LIMIT_OPTIONS.map((n) => (
+                  {gamesOptions.map((n) => (
                     <option key={n} value={n}>
                       {n}
                     </option>
@@ -289,7 +291,7 @@ export default function Dashboard({
             >
               <DonutRanking
                 items={gamesData}
-                rankingItems={gamesData.slice(0, gamesLimit)}
+                rankingItems={gamesData.slice(0, shownGamesLimit)}
                 rankingTitle="Ranking gier"
                 periodLabel={periodLabel}
                 getLabel={(g) => g.activity_name}

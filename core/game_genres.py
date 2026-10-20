@@ -46,12 +46,14 @@ GAME_GENRES: dict[str, str] = {
     "tlauncher": "Survival",  # Minecraft launcher
     "icarus": "Survival",
     "valheim": "Survival",
+    "space engineers 2": "Survival",
     # Symulatory
     "american truck simulator": "Symulatory",
     "thehunter call of the wild": "Symulatory",
     "forza horizon 6": "Symulatory",
     "assetto corsa competizione": "Symulatory",
     "cities skylines": "Symulatory",
+    "universe sandbox": "Symulatory",
     # RPG
     "kingdom come deliverance": "RPG",
     "kingdom come deliverance ii": "RPG",
@@ -62,6 +64,7 @@ GAME_GENRES: dict[str, str] = {
     "company of heroes": "Strategie",
     "warcraft iii reign of chaos": "Strategie",
     "colonist": "Strategie",
+    "dawn of discovery": "Strategie",
 }
 
 # Activities left out of genre stats entirely: Roblox (a platform, not a genre),

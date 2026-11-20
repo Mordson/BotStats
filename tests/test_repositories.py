@@ -42,6 +42,71 @@ def test_stalker_2_variants_aggregate_together():
     ]
 
 
+def test_strips_trailing_v_prefixed_version():
+    assert (
+        _normalize_activity_name("Horizon Forbidden West Complete Edition v1.5.80.0")
+        == "Horizon Forbidden West"
+    )
+
+
+def test_strips_trailing_bare_dotted_version():
+    assert _normalize_activity_name("Some Game 1.0.2") == "Some Game"
+
+
+def test_keeps_bare_numbers_in_titles():
+    assert _normalize_activity_name("Battlefield 6") == "Battlefield 6"
+    assert _normalize_activity_name("Anno 1800") == "Anno 1800"
+
+
+def test_collapses_spaced_dash_separator_and_strips_special_edition():
+    assert (
+        _normalize_activity_name("The Elder Scrolls V Skyrim - Special Edition")
+        == "The Elder Scrolls V Skyrim"
+    )
+
+
+def test_keeps_unspaced_dash():
+    assert _normalize_activity_name("Counter-Strike 2") == "Counter-Strike 2"
+
+
+def test_strips_complete_edition_case_insensitively():
+    assert _normalize_activity_name("Horizon Forbidden West complete edition") == (
+        "Horizon Forbidden West"
+    )
+
+
+def test_keeps_remastered_and_definitive_editions():
+    assert _normalize_activity_name("Some Game Remastered") == "Some Game Remastered"
+    assert (
+        _normalize_activity_name("Age of Empires II: Definitive Edition")
+        == "Age of Empires II Definitive Edition"
+    )
+
+
+def test_keeps_bare_bundle_word_without_edition():
+    assert _normalize_activity_name("The Witcher 3 GOTY") == "The Witcher 3 GOTY"
+
+
+def test_name_that_is_only_an_edition_is_kept():
+    assert _normalize_activity_name("Gold Edition") == "Gold Edition"
+
+
+def test_horizon_variants_aggregate_together():
+    rows = [
+        ("Horizon Forbidden West Complete Edition v1.5.80.0", 10),
+        ("Horizon Forbidden West Complete Edition", 5),
+    ]
+    assert _aggregate_by_normalized_name(rows) == [("Horizon Forbidden West", 15)]
+
+
+def test_skyrim_variants_aggregate_together():
+    rows = [
+        ("The Elder Scrolls V: Skyrim", 10),
+        ("The Elder Scrolls V Skyrim - Special Edition", 5),
+    ]
+    assert _aggregate_by_normalized_name(rows) == [("The Elder Scrolls V Skyrim", 15)]
+
+
 def test_aggregate_empty_rows_returns_empty_list():
     assert _aggregate_by_normalized_name([]) == []
 

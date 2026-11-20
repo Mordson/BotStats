@@ -30,16 +30,40 @@ _ACTIVITY_NAME_ALIASES: dict[str, str] = {
 }
 
 
-def _normalize_activity_name(name: str) -> str:
-    """Strips trademark symbols and normalizes subtitle separators.
+# A trailing dotted version number, e.g. 'v1.5.80.0' or '1.0.2'. Bare numbers
+# ('Battlefield 6', 'Anno 1800') have no dot and are left alone.
+_TRAILING_VERSION = re.compile(r'\s+v?\d+(?:\.\d+)+$', re.IGNORECASE)
 
-    E.g. 'Call of Duty® Black Ops 7' and 'Call of Duty: Black Ops 7'
-    are treated as the same game. Also collapses known aliases (see
-    `_ACTIVITY_NAME_ALIASES`) for games Discord reports under different names.
+# A trailing bundle edition that's the same game as the base title. Requires the
+# word 'Edition'; editions that are effectively different games (Remastered,
+# Definitive, Anniversary) and bare suffixes ('GOTY' alone) are deliberately not
+# matched - add those to `_ACTIVITY_NAME_ALIASES` if they should merge.
+_TRAILING_BUNDLE_EDITION = re.compile(
+    r'\s+(?:Complete|Deluxe|Gold|Ultimate|Special|GOTY|Game of the Year)\s+Edition$',
+    re.IGNORECASE,
+)
+
+
+def _strip_suffix(name: str, pattern: re.Pattern[str]) -> str:
+    """Removes `pattern` from the end of `name`, unless nothing would be left."""
+    stripped = pattern.sub('', name).strip()
+    return stripped or name
+
+
+def _normalize_activity_name(name: str) -> str:
+    """Reduces the different names Discord reports for one game to a single name.
+
+    - strips trademark symbols: 'Call of Duty® Black Ops 7' -> 'Call of Duty Black Ops 7'
+    - turns ': ' and ' - ' subtitle separators into a space
+    - strips a trailing version number: 'Foo v1.5.80.0' -> 'Foo'
+    - strips a trailing bundle edition: 'Foo Complete Edition' -> 'Foo'
+    - collapses known aliases (see `_ACTIVITY_NAME_ALIASES`)
     """
     name = re.sub(r'[®™℠]', '', name)
-    name = name.replace(': ', ' ')
+    name = name.replace(': ', ' ').replace(' - ', ' ')
     name = re.sub(r'\s+', ' ', name).strip()
+    name = _strip_suffix(name, _TRAILING_VERSION)
+    name = _strip_suffix(name, _TRAILING_BUNDLE_EDITION)
     return _ACTIVITY_NAME_ALIASES.get(name.lower(), name)
 
 

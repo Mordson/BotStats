@@ -68,6 +68,18 @@ Each Donut always shows the top 8 items as their own slices. Past that, the next
 slice (and legend row) while it makes up at least 20% of the remaining "Inne" (other) total, up to
 12 slices; if only one item would be left in "Inne", it is shown on its own instead.
 
+### Game name normalization
+
+Discord often reports one game under several names, so every activity name goes through
+`_normalize_activity_name` (`core/repositories.py`) both when the bot stores a session and when the
+API aggregates stats. It strips trademark symbols (`®™℠`), turns `: ` and ` - ` separators into a
+space, and strips a trailing dotted version (`v1.5.80.0`) and a trailing bundle edition
+(`Complete/Deluxe/Gold/Ultimate/Special/GOTY/Game of the Year Edition`). So
+`Horizon Forbidden West Complete Edition v1.5.80.0` and `The Elder Scrolls V: Skyrim - Special Edition`
+become `Horizon Forbidden West` and `The Elder Scrolls V Skyrim`. Editions that are effectively
+separate games (Remastered, Definitive, Anniversary) are kept as they are. Anything the rules
+don't cover goes into `_ACTIVITY_NAME_ALIASES`.
+
 ### Game genres
 
 Discord doesn't report a game's genre, so `core/game_genres.py` maps each game by hand (keyed by the

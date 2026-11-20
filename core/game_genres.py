@@ -58,6 +58,8 @@ GAME_GENRES: dict[str, str] = {
     "kingdom come deliverance": "RPG",
     "kingdom come deliverance ii": "RPG",
     "assassin's creed valhalla": "RPG",
+    "horizon forbidden west": "RPG",
+    "the elder scrolls v skyrim": "RPG",
     # MOBA
     "league of legends": "MOBA",
     # Strategie
